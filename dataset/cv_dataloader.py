@@ -8,7 +8,6 @@ import argparse
 
 class Cifar10:
     def __init__(self, root_dir="./data"):
-        print('==> Preparing data..')
         self.transform_train = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),

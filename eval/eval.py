@@ -30,6 +30,7 @@ def train(data_loader, model, criterion, optimizer, epochs=50, print_every=10):
                 print ("Epoch [{}/{}], Step [{}/{}] Loss: {:.4f}"
                     .format(epoch+1, epochs, i+1, total_step, loss.item()))
 
+
 def interpret_model(data_loader, model, model_interpreter):
     train_loader = data_loader.get_train_loader()
 
