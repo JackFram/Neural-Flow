@@ -7,6 +7,7 @@ from utils import *
 import torch.nn as nn
 import torch.optim as optim
 
+
 def train(data_loader, model, criterion, optimizer, epochs=50, print_every=10):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')   
     

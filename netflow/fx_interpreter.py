@@ -2,9 +2,11 @@ import torch
 import torch.nn as nn
 import torch.fx.symbolic_trace as symbolic_trace
 from torch.fx.interpreter import *
+from net_interpreter import NetIntBase
+import sys
+sys.path.append("../")
 
 from model import *
-
 
 class funcInterpreter(Interpreter):
     def __init__(self, module: GraphModule, garbage_collect_values: bool = True):
@@ -49,7 +51,6 @@ class funcInterpreter(Interpreter):
         ret = getattr(self_obj, target)(*args_tail, **kwargs)
         self.feature_list.append((ret, name))
         return ret
-        
 
     def call_function(self, target : Target, name, args : Tuple[Argument, ...], kwargs : Dict[str, Any]) -> Any:
         assert not isinstance(target, str)
@@ -70,16 +71,31 @@ class funcInterpreter(Interpreter):
         return super().output(target, args, kwargs)
 
 
+class FxInt(NetIntBase):
+    def __init__(self, module: nn.Module):
+        super().__init__(module)
+        self.graph = symbolic_trace(module)
+        self.interp = funcInterpreter(self.graph)
+
+    def run(self, input: torch.Tensor):
+        self.interp.run(input)
+
+    def get_feature_list(self):
+        return [feat[0] for feat in self.interp.feature_list]
+
+    def get_name_list(self):
+        return [feat[1] for feat in self.interp.feature_list]
+
+    def __getitem__(self, item: int):
+        return {'name': self.interp.feature_list[item][1], 'value': self.interp.feature_list[item][0]}
+
+
 def test():
     # model = VGG('VGG11')
     model = ResNet18()
-    traced = symbolic_trace(model)
-    # print(traced.graph)
-    
-    interp = funcInterpreter(traced)
-    interp.run(torch.randn(1, 3, 32, 32))
-    for feat in interp.feature_list:
-        print(feat[1:])
+    flow = FxInt(model)
+    flow.run(torch.randn(1, 3, 32, 32))
+    print(flow.get_name_list())
 
 if __name__ == "__main__":
     test()
