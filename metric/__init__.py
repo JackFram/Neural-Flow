@@ -1,1 +1,1 @@
-from metric.TS import TopologySimilarity
+from .TS import TopologySimilarity

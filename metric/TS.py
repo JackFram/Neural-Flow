@@ -20,10 +20,10 @@ class TopologySimilarity(Metric):
 
         # TODO: find shape and check no diagonal elements
         feature1_topo = torch.cdist(feature1, feature1, 2).numpy()[np.triu_indices(B - 1)]
-        feature2_topo = torch.cdist(feature1, feature1, 2).numpy()[np.triu_indices(B - 1)]  # TODO: find shape
+        feature2_topo = torch.cdist(feature2, feature2, 2).numpy()[np.triu_indices(B - 1)]  # TODO: find shape
 
-        norm_feature1 = (feature1 - feature1.mean()) / np.linalg.norm(feature1)
-        norm_feature2 = (feature2 - feature2.mean()) / np.linalg.norm(feature2)
+        norm_feature1_topo = (feature1_topo - feature1_topo.mean()) / np.linalg.norm(feature1_topo)
+        norm_feature2_topo = (feature2_topo - feature2_topo.mean()) / np.linalg.norm(feature2_topo)
 
-        return norm_feature1.T @ norm_feature2
+        return norm_feature1_topo.T @ norm_feature2_topo
 
