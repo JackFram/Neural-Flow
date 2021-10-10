@@ -17,3 +17,4 @@ if __name__ == "__main__":
     feature_list = flow.get_feature_list()
     metric = TopologySimilarity()
     print(metric.get_batch_score(feature_list[1], feature_list[3]))
+    # TODO: add quantization package and use it here
