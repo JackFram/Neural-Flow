@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.fx.symbolic_trace as symbolic_trace
 from torch.fx.interpreter import *
-from net_interpreter import NetIntBase
+from netflow.net_interpreter import NetIntBase
 import sys
 sys.path.append("../")
 
@@ -81,7 +81,7 @@ class FxInt(NetIntBase):
         self.interp.run(input)
 
     def get_feature_list(self):
-        return [feat[0] for feat in self.interp.feature_list]
+        return [feat[0].detach() if isinstance(feat[0], torch.Tensor) else feat[0] for feat in self.interp.feature_list]
 
     def get_name_list(self):
         return [feat[1] for feat in self.interp.feature_list]

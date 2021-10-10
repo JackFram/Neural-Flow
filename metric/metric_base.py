@@ -3,8 +3,7 @@ import numpy as np
 
 class Metric(object):
     def __init__(self):
-
-        raise NotImplementedError
+        pass
 
     def get_batch_score(self, feature1, feature2):
         '''
