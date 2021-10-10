@@ -22,4 +22,5 @@ if __name__ == "__main__":
     print(name_list)
     # TODO: add quantization package and use it here
     op = QuantizeOp(model)
+    op.get_config()
     op.apply()
