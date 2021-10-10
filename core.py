@@ -8,6 +8,7 @@ from misc.eval import eval
 from model import *
 from netflow import *
 from metric import TopologySimilarity
+from approx_optim import QuantizeOp
 
 
 if __name__ == "__main__":
@@ -18,3 +19,5 @@ if __name__ == "__main__":
     metric = TopologySimilarity()
     print(metric.get_batch_score(feature_list[1], feature_list[3]))
     # TODO: add quantization package and use it here
+    op = QuantizeOp(model)
+    op.apply()
