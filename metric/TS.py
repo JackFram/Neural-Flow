@@ -7,7 +7,7 @@ class TopologySimilarity(Metric):
     def __init__(self):
         super().__init__()
 
-    def get_score(self, feature1, feature2):
+    def get_batch_score(self, feature1, feature2):
         '''
 
         :param feature1: Torch.Tensor from model layer, shape (B, ...)

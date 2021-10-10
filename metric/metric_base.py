@@ -25,5 +25,5 @@ class Metric(object):
         ret = np.zeros((N, N))
         for i in range(N):
             for j in range(N):
-                ret[i, j] = self.get_score(feature_list[i], feature_list[j])
+                ret[i, j] = self.get_batch_score(feature_list[i], feature_list[j])
         return ret

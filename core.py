@@ -16,4 +16,4 @@ if __name__ == "__main__":
     flow.run(torch.randn(10, 3, 32, 32))
     feature_list = flow.get_feature_list()
     metric = TopologySimilarity()
-    print(metric.get_score(feature_list[0], feature_list[1]))
+    print(metric.get_batch_score(feature_list[1], feature_list[3]))
