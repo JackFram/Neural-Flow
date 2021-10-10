@@ -13,6 +13,7 @@ class TopologySimilarity(Metric):
         :param feature1: Torch.Tensor from model layer, shape (B, ...)
         :param feature2: Torch.Tensor from model layer, shape (B, ...)
         :return: Scalar, complexity level of the feature transformation
+
         '''
         B = feature1.shape[0]
         feature1 = feature1.view(B, -1)
