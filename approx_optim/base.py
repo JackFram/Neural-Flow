@@ -21,3 +21,10 @@ class BaseOp(object):
         torch.save(self.mod_model.state_dict(), "temp.p")
         print('Model Size after {} (MB):'.format(self.op_name), os.path.getsize("temp.p") / 1e6)
         os.remove('temp.p')
+
+    def reset(self):
+        raise NotImplementedError
+
+    @property
+    def operatable(self):
+        raise NotImplementedError

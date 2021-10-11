@@ -97,14 +97,3 @@ class FxInt(NetIntBase):
 
     def __getitem__(self, item: int):
         return {'name': self.interp.feature_list[item][1], 'value': self.interp.feature_list[item][0]}
-
-
-def test():
-    # model = VGG('VGG11')
-    model = ResNet18()
-    flow = FxInt(model)
-    flow.run(torch.randn(1, 3, 32, 32))
-    print(flow.get_name_list())
-
-if __name__ == "__main__":
-    test()
