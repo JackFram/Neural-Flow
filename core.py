@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 from approx_optim import *
+from approx_optim.pruning import PruningOp
 
 from misc.eval import eval
 from model import *
