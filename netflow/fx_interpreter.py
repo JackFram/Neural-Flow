@@ -77,7 +77,6 @@ class FxInt(NetIntBase):
         super().__init__(module)
         self.graph = symbolic_trace(module)
         self.interp = funcInterpreter(self.graph)
-        self.modifiable_index = []
 
     def run(self, input: torch.Tensor):
         self.interp.run(input)
@@ -89,8 +88,8 @@ class FxInt(NetIntBase):
 
     def get_name_list(self, modifiable=False):
         if modifiable:
-            return [feat[1] for feat in self.interp.mod_feature_list]
-        return [feat[1] for feat in self.interp.feature_list]
+            return [feat[1].replace("_", ".") for feat in self.interp.mod_feature_list]
+        return [feat[1].replace("_", ".") for feat in self.interp.feature_list]
 
     @property
     def modifiable(self):

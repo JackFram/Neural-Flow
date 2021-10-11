@@ -19,12 +19,13 @@ if __name__ == "__main__":
     name_list = flow.get_name_list()
     print(name_list)
 
-    metric = TopologySimilarity()
-    print(metric.get_batch_score(feature_list[1], feature_list[3]))
+    # metric = TopologySimilarity()
+    # print(metric.get_batch_score(feature_list[1], feature_list[3]))
 
     op = QuantizeOp(model)
+    print(op.quantizable)
     op.get_config(name_list=name_list)
-    op.apply()
+    op.apply(verbose=False)
 
     # TODO: evaluation and visualization
 

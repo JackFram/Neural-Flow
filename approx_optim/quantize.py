@@ -12,12 +12,13 @@ class QuantizeOp(BaseOp):
         super().__init__(model)
         self.op_name = "quantize"
         self.qconfig_dict = None
-        self.quantizable()
+        # self.quantizable()
 
     def apply(self, verbose=False, *args, **kwargs):
 
         '''
 
+        :param verbose:
         :param args:
         :param kwargs:
         :return:
@@ -46,7 +47,7 @@ class QuantizeOp(BaseOp):
         }
 
         for name in name_list:
-            self.qconfig_dict["module_name"].append((name.replace("_", "."), qconfig))
+            self.qconfig_dict["module_name"].append((name, qconfig))
 
     @property
     def quantizable(self):
@@ -54,3 +55,4 @@ class QuantizeOp(BaseOp):
         for name, mod in self.model.named_modules():
             if isinstance(mod, nn.Linear) or isinstance(mod, nn.Conv2d):
                 ret_list.append(name)
+        return ret_list
