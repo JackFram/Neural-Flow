@@ -12,12 +12,12 @@ class QuantizeOp(BaseOp):
         super().__init__(model)
         self.op_name = "quantize"
         self.qconfig_dict = None
+        self.quantizable()
 
-    def apply(self, name=None, *args, **kwargs):
+    def apply(self, verbose=False, *args, **kwargs):
 
         '''
 
-        :param name:
         :param args:
         :param kwargs:
         :return:
@@ -25,63 +25,32 @@ class QuantizeOp(BaseOp):
 
         model_to_quantize = copy.deepcopy(self.model)
         prepared_model = prepare_fx(model_to_quantize, self.qconfig_dict)
-        print("prepared model:", prepared_model)
+
+        if verbose:
+            print("prepared model:", prepared_model)
         self.mod_model = convert_fx(prepared_model)
-        print("quantized model", self.mod_model)
+        if verbose:
+            print("quantized model", self.mod_model)
         self.print_size()
 
-    def get_config(self):
+    def get_config(self, name_list: list, qconfig=get_default_qconfig("fbgemm")):
         '''
 
-        qconfig = {
-            " : qconfig_global,
-            "sub" : qconfig_sub,
-            "sub.fc" : qconfig_fc,
-            "sub.conv": None
-        }
-        qconfig_dict = {
-            # qconfig? means either a valid qconfig or None
-            # optional, global config
-            "": qconfig?,
-            # optional, used for module and function types
-            # could also be split into module_types and function_types if we prefer
-            "object_type": [
-                (torch.nn.Conv2d, qconfig?),
-                (torch.nn.functional.add, qconfig?),
-                ...,
-            ],
-            # optional, used for module names
-            "module_name": [
-                ("foo.bar", qconfig?)
-                ...,
-            ],
-            # optional, matched in order, first match takes precedence
-            "module_name_regex": [
-                ("foo.*bar.*conv[0-9]+", qconfig?)
-                ...,
-            ],
-            # priority (in increasing order): global, object_type, module_name_regex, module_name
-            # qconfig == None means fusion and quantization should be skipped for anything
-            # matching the rule
-
-            # **api subject to change**
-            # optional: specify the path for standalone modules
-            # These modules are symbolically traced and quantized as one unit
-            # so that the call to the submodule appears as one call_module
-            # node in the forward graph of the GraphModule
-            "standalone_module_name": [
-                "submodule.standalone"
-            ],
-            "standalone_module_class": [
-                StandaloneModuleClass
-            ]
-        }
-
+        :param name_list: module names to apply quantization
+        :param qconfig: quantization configuration
+        :return: no return, update the qconfig_dict
         '''
-        qconfig = get_default_qconfig("fbgemm")
         self.qconfig_dict = {
             "module_name": [
-                ("conv1", qconfig),
-                ("layer1.0.conv1", qconfig)
             ]
         }
+
+        for name in name_list:
+            self.qconfig_dict["module_name"].append((name.replace("_", "."), qconfig))
+
+    @property
+    def quantizable(self):
+        ret_list = []
+        for name, mod in self.model.named_modules():
+            if isinstance(mod, nn.Linear) or isinstance(mod, nn.Conv2d):
+                ret_list.append(name)

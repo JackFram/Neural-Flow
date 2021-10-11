@@ -11,6 +11,7 @@ from model import *
 class funcInterpreter(Interpreter):
     def __init__(self, module: GraphModule, garbage_collect_values: bool = True):
         self.feature_list = []
+        self.mod_feature_list = []
         super().__init__(module, garbage_collect_values=garbage_collect_values)
 
     def run_node(self, n : Node) -> Any:
@@ -64,7 +65,7 @@ class funcInterpreter(Interpreter):
         submod = self.fetch_attr(target)
         ret = submod(*args, **kwargs)
         self.feature_list.append((ret, name))
-
+        self.mod_feature_list.append((ret, name))
         return ret
     
     def output(self, target: 'Target', name, args: Tuple[Argument, ...], kwargs: Dict[str, Any]) -> Any:
@@ -76,15 +77,24 @@ class FxInt(NetIntBase):
         super().__init__(module)
         self.graph = symbolic_trace(module)
         self.interp = funcInterpreter(self.graph)
+        self.modifiable_index = []
 
     def run(self, input: torch.Tensor):
         self.interp.run(input)
 
-    def get_feature_list(self):
+    def get_feature_list(self, modifiable=False):
+        if modifiable:
+            return [feat[0].detach() if isinstance(feat[0], torch.Tensor) else feat[0] for feat in self.interp.mod_feature_list]
         return [feat[0].detach() if isinstance(feat[0], torch.Tensor) else feat[0] for feat in self.interp.feature_list]
 
-    def get_name_list(self):
+    def get_name_list(self, modifiable=False):
+        if modifiable:
+            return [feat[1] for feat in self.interp.mod_feature_list]
         return [feat[1] for feat in self.interp.feature_list]
+
+    @property
+    def modifiable(self):
+        return None
 
     def __getitem__(self, item: int):
         return {'name': self.interp.feature_list[item][1], 'value': self.interp.feature_list[item][0]}

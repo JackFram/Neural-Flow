@@ -3,12 +3,9 @@ import torch.nn as nn
 
 
 class NetIntBase(object):
-    def __init__(self, net:nn.Module):
-        self.net = net
+    def __init__(self, module:nn.Module):
+        self.module = module
         self.graph = None
-
-    def __getattr__(self, *kargs):
-        raise NotImplementedError
 
     def __len__(self):
         raise NotImplementedError
