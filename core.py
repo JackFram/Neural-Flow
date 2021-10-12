@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 from approx_optim import *
 from approx_optim.pruning import PruningOp
+from misc.eval import eval
 
 from misc.eval import eval
 from model import *
@@ -18,9 +19,10 @@ if __name__ == "__main__":
     flow.run(torch.randn(10, 3, 32, 32))
     feature_list = flow.get_feature_list()
     name_list = flow.get_name_list()
-
+    print(name_list)
     op = QuantizeOp(model)
     op.set_config(name_list)
+    print(op.operatable)
 
     metric = TopologySimilarity()
     for name in op.operatable:
@@ -29,7 +31,8 @@ if __name__ == "__main__":
         print(metric.get_batch_score(feature_list[0], feature_list[idx]))
 
     op.apply(name_list[1:2])
-    op.mod_model
+    eval(op.mod_model, testloader)
+    op.model
 
     # TODO: evaluation and visualization
 

@@ -53,6 +53,8 @@ class QuantizeOp(BaseOp):
             print("quantized model", self.mod_model)
         self.print_size()
 
+        return self.mod_model
+
     def reset(self):
         self.qconfig_dict = {
             "module_name": [

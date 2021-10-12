@@ -36,7 +36,7 @@ class PruningOp(BaseOp):
 
 
     @property
-    def prunable(self):
+    def operatable(self):
         ret_list = []
         for name, mod in self.model.named_modules():
             if isinstance(mod, nn.Linear) or isinstance(mod, nn.Conv2d):
