@@ -2,6 +2,7 @@ import copy
 import torch
 import torch.nn as nn
 from .base import BaseOp
+from collections import OrderedDict
 
 from torch.quantization.quantize_fx import prepare_fx, convert_fx
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
@@ -11,12 +12,10 @@ class QuantizeOp(BaseOp):
     def __init__(self, model: nn.Module):
         super().__init__(model)
         self.op_name = "quantize"
-        self.qconfig_dict = None
         self.qconfig = None
         self.name_list = None
         self.qconfig_dict = {
-            "module_name": [
-            ]
+            "module_name": OrderedDict()
         }
 
     def apply(self, name_list, verbose=False, *args, **kwargs):
@@ -39,13 +38,11 @@ class QuantizeOp(BaseOp):
                 print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
                 raise AttributeError
 
-            self.qconfig_dict["module_name"].append((name, self.qconfig))
-
+            self.qconfig_dict["module_name"][name] = self.qconfig
         model_to_quantize = copy.deepcopy(self.model)
         if verbose:
             print("model to qunatize:", model_to_quantize)
         prepared_model = prepare_fx(model_to_quantize, self.qconfig_dict)
-
         if verbose:
             print("prepared model:", prepared_model)
         self.mod_model = convert_fx(prepared_model)
@@ -57,8 +54,7 @@ class QuantizeOp(BaseOp):
 
     def reset(self):
         self.qconfig_dict = {
-            "module_name": [
-            ]
+            "module_name": OrderedDict()
         }
 
     def set_config(self, name_list: list, qconfig=get_default_qconfig("fbgemm")):
