@@ -9,7 +9,7 @@ class BaseOp(object):
         self.mod_model = None
         self.op_name = None
 
-    def apply(self, name, *kargs):
+    def apply(self, name, *args, **kwargs):
         raise NotImplementedError
 
     def print_size(self):
