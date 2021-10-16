@@ -29,6 +29,7 @@ if __name__ == "__main__":
     
     flow = FxInt(model)
     # flow.run(next(iter(train_loader)))
+
     for x, y in train_loader:
         x = x.to(device)
         flow.run(x)
