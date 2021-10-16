@@ -28,24 +28,28 @@ if __name__ == "__main__":
     test_loader = ds.get_test_loader()
     
     flow = FxInt(model)
-    #flow.run(next(iter(train_loader)))
-    flow.run(torch.randn(10, 3, 32, 32).to(device))
-    feature_list = flow.get_feature_list()
-    name_list = flow.get_name_list()
-    print(name_list)
-    op = QuantizeOp(model)
-    op.set_config(name_list)
-    # op = PruningOp(model)
-    print(op.operatable)
+    # flow.run(next(iter(train_loader)))
+    for x, y in train_loader:
+        x = x.to(device)
+        flow.run(x)
+        feature_list = flow.get_feature_list()
+        name_list = flow.get_name_list()
+        print(name_list)
+        op = QuantizeOp(model)
+        op.set_config(name_list)
+        # op = PruningOp(model)
+        print(op.operatable)
 
-    metric = TopologySimilarity()
-    for name in op.operatable:
-        idx = name_list.index(name)
-        print(name)
-        print(metric.get_batch_score(feature_list[idx-1], feature_list[idx]))
-        op.apply([name])
-        #eval(op.mod_model, test_loader)
-        #op.reset()
+        metric = TopologySimilarity()
+        for name in op.operatable:
+            idx = name_list.index(name)
+            print(name)
+            print(metric.get_batch_score(feature_list[idx-1], feature_list[idx]))
+            # op.apply([name])
+            #eval(op.mod_model, test_loader)
+            #op.reset()
+
+        break
 
     # TODO: evaluation and visualization
 

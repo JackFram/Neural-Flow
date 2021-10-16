@@ -37,9 +37,6 @@ def train(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-    if device == 'cuda':
-        #net = torch.nn.DataParallel(net)
-        cudnn.benchmark = True
     net.to(device)
 
     if args.resume:
