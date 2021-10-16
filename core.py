@@ -45,7 +45,7 @@ if __name__ == "__main__":
         for name in op.operatable:
             idx = name_list.index(name)
             print(name)
-            print(metric.get_batch_score(feature_list[idx-1], feature_list[idx]))
+            print(metric.get_batch_score(feature_list[1], feature_list[idx]))
             # op.apply([name])
             #eval(op.mod_model, test_loader)
             #op.reset()

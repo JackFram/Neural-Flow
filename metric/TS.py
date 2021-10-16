@@ -7,6 +7,16 @@ class TopologySimilarity(Metric):
     def __init__(self):
         super().__init__()
 
+    def get_topo(self, feature):
+        B = feature.shape[0]  # get batch number
+        feature = feature.view(B, -1)
+        topo = torch.cdist(feature, feature, 2).cpu().numpy()[np.triu_indices(B - 1)]
+        print(topo.shape)
+        topo = topo - topo.mean()
+        norm = np.linalg.norm(topo)
+        topo = topo / norm
+        return topo
+
     def get_batch_score(self, feature1, feature2):
         '''
 
@@ -15,16 +25,9 @@ class TopologySimilarity(Metric):
         :return: Scalar, complexity level of the feature transformation
 
         '''
-        B = feature1.shape[0]
-        feature1 = feature1.view(B, -1)
-        feature2 = feature2.view(B, -1)
+        norm_feature1_topo = self.get_topo(feature1)
+        norm_feature2_topo = self.get_topo(feature2)
+        TS_score = norm_feature1_topo.T @ norm_feature2_topo
 
-        # TODO: find shape and check no diagonal elements
-        feature1_topo = torch.cdist(feature1, feature1, 2).cpu().numpy()[np.triu_indices(B - 1)]
-        feature2_topo = torch.cdist(feature2, feature2, 2).cpu().numpy()[np.triu_indices(B - 1)]  # TODO: find shape
-
-        norm_feature1_topo = (feature1_topo - feature1_topo.mean()) / np.linalg.norm(feature1_topo)
-        norm_feature2_topo = (feature2_topo - feature2_topo.mean()) / np.linalg.norm(feature2_topo)
-
-        return norm_feature1_topo.T @ norm_feature2_topo
+        return TS_score
 
