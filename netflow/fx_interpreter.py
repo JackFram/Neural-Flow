@@ -6,7 +6,7 @@ from netflow.net_interpreter import NetIntBase
 import sys
 sys.path.append("../")
 
-from model import *
+# from model import *
 
 class funcInterpreter(Interpreter):
     def __init__(self, module: GraphModule, garbage_collect_values: bool = True):

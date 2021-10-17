@@ -1,15 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
-import argparse
-import os
 import sys
 sys.path.append("../")
-
-from dataset import get_dataset
-from model import get_model
 
 
 def eval(model: nn.Module, dataloader):

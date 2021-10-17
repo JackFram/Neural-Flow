@@ -1,17 +1,8 @@
-import torch
-import torch.nn as nn
-import numpy as np
-import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
-from approx_optim import *
-from approx_optim.pruning import PruningOp
-from misc.eval import eval
-from model import *
+from model import ResNet18
 from netflow import *
 from metric import TopologySimilarity
-from approx_optim import QuantizeOp
+from opt import QuantizeOp
 from dataset import get_dataset
-
 
 
 if __name__ == "__main__":

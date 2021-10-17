@@ -11,7 +11,6 @@ class TopologySimilarity(Metric):
         B = feature.shape[0]  # get batch number
         feature = feature.view(B, -1)
         topo = torch.cdist(feature, feature, 2).cpu().numpy()[np.triu_indices(B - 1)]
-        print(topo.shape)
         topo = topo - topo.mean()
         norm = np.linalg.norm(topo)
         topo = topo / norm
