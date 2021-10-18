@@ -15,7 +15,7 @@ def eval(model: nn.Module, dataloader):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(dataloader):
-            inputs, targets = inputs.to(device), targets.to(device)
+            inputs, targets = inputs.to('cpu'), targets.to('cpu')
             outputs = model(inputs)
             loss = criterion(outputs, targets)
 

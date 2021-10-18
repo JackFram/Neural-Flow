@@ -13,7 +13,7 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model.to(device)
 
-    checkpoint = torch.load("./misc/checkpoint/ckpt_resnet18_cifar10.pth")
+    checkpoint = torch.load("../data/checkpoint/ckpt_resnet18_cifar10.pth")
     model.load_state_dict(checkpoint['net'])
     model.eval()
     ds = get_dataset("cifar10")
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         flow=flow
     )
 
-    model = chief.run()
+    model = chief.run(rate=1)
 
-    print(eval(model, test_loader))
+    print(eval(model.to('cpu'), test_loader))
 
