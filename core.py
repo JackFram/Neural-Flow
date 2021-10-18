@@ -37,14 +37,14 @@ if __name__ == "__main__":
 
     metric = TopologySimilarity()
 
-    chief = Greedy(
+    chef = Greedy(
         model=model,
         ops=ops,
         metric=metric,
         flow=flow
     )
 
-    model = chief.run(rate=1)
+    model = chef.run(rate=1)
 
     print(eval(model.to('cpu'), test_loader))
 
