@@ -3,7 +3,7 @@ import numpy as np
 
 
 class Greedy(CookBase):
-    def __init__(self, model: nn.Module, ops: [BaseOp], metric: Metric, flow: NetIntBase):
+    def __init__(self, model: nn.Module, ops: List[BaseOp], metric: Metric, flow: NetIntBase):
         super().__init__(model=model, ops=ops, metric=metric, flow=flow)
 
     def run(self, rate=0) -> nn.Module:
@@ -26,7 +26,7 @@ class Greedy(CookBase):
                 for name in candidate:
                     idx = name_list.index(name)
                     score_list.append(self.metric.get_batch_score(feature_list[idx - 1], feature_list[idx]))
-                if isinstance(op, QuantizeOp):
+                if isinstance(op, QuantizeOp) or isinstance(op, PruningOp):
                     size = int(rate*len(candidate))
                     if size:
                         sorted_index = list(reversed(np.argsort(score_list)))

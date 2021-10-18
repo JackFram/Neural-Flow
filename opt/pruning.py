@@ -12,6 +12,7 @@ class PruningOp(BaseOp):
         self.op_name = "pruning"
         self.amount = amount
         self.method = method
+        self.config = None
 
     def apply(self, name_list, verbose=False, *args, **kwargs):
         name_set = set()
@@ -42,6 +43,11 @@ class PruningOp(BaseOp):
 
         prune.remove(module, 'weight')
 
+    def set_config(self, config={}):
+        self.config = config
+
+    def reset(self):
+        self.config = None
 
     @property
     def operatable(self):
