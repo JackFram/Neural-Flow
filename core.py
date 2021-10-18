@@ -3,6 +3,8 @@ from netflow import *
 from metric import TopologySimilarity
 from opt import QuantizeOp
 from dataset import get_dataset
+from cook.greedy import Greedy
+from misc.eval import eval
 
 
 if __name__ == "__main__":
@@ -21,27 +23,28 @@ if __name__ == "__main__":
     flow = FxInt(model)
     # flow.run(next(iter(train_loader)))
 
+    feature_list = None
+    name_list = None
+
     for x, y in train_loader:
         x = x.to(device)
         flow.run(x)
         feature_list = flow.get_feature_list()
         name_list = flow.get_name_list()
-        print(name_list)
-        op = QuantizeOp(model)
-        op.set_config(name_list)
-        # op = PruningOp(model)
-        print(op.operatable)
-
-        metric = TopologySimilarity()
-        for name in op.operatable:
-            idx = name_list.index(name)
-            print(name)
-            print(metric.get_batch_score(feature_list[1], feature_list[idx]))
-            # op.apply([name])
-            #eval(op.mod_model, test_loader)
-            #op.reset()
-
         break
 
-    # TODO: evaluation and visualization
+    ops = [QuantizeOp]
+
+    metric = TopologySimilarity()
+
+    chief = Greedy(
+        model=model,
+        ops=ops,
+        metric=metric,
+        flow=flow
+    )
+
+    model = chief.run()
+
+    print(eval(model, test_loader))
 

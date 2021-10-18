@@ -25,6 +25,9 @@ class BaseOp(object):
     def reset(self):
         raise NotImplementedError
 
+    def set_config(self, config, *args, **kwargs):
+        raise NotImplementedError
+
     @property
     def operatable(self):
         raise NotImplementedError

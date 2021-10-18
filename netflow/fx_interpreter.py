@@ -81,14 +81,10 @@ class FxInt(NetIntBase):
     def run(self, input: torch.Tensor):
         self.interp.run(input)
 
-    def get_feature_list(self, modifiable=False):
-        if modifiable:
-            return [feat[0].detach() if isinstance(feat[0], torch.Tensor) else feat[0] for feat in self.interp.mod_feature_list]
+    def get_feature_list(self):
         return [feat[0].detach() if isinstance(feat[0], torch.Tensor) else feat[0] for feat in self.interp.feature_list]
 
-    def get_name_list(self, modifiable=False):
-        if modifiable:
-            return [feat[1].replace("_", ".") for feat in self.interp.mod_feature_list]
+    def get_name_list(self):
         return [feat[1].replace("_", ".") for feat in self.interp.feature_list]
 
     @property

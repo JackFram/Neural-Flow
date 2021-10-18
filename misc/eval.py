@@ -24,12 +24,9 @@ def eval(model: nn.Module, dataloader):
             total += targets.size(0)
             batch_num += 1
             correct += predicted.eq(targets).sum().item()
-            # print("{}/{}, {}".format(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-            #              % (test_loss/(batch_idx+1), 100.*correct/total, correct, total)))
-            # progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-            #              % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
     # Save checkpoint.
     acc = 100.*correct/total
     loss = test_loss/batch_num
-    print("{}".format('Loss: %.3f | Acc: %.3f%% (%d/%d)' % (loss, acc, correct, total)))
+    # print("{}".format('Loss: %.3f | Acc: %.3f%% (%d/%d)' % (loss, acc, correct, total)))
+    return acc, loss

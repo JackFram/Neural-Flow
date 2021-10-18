@@ -30,9 +30,6 @@ class QuantizeOp(BaseOp):
         '''
 
         for name in name_list:
-            if name not in self.name_list:
-                print("{} is not a layer name, retry something in:{} !".format(name, self.operatable))
-                raise AttributeError
 
             if name not in self.operatable:
                 print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
@@ -57,15 +54,14 @@ class QuantizeOp(BaseOp):
             "module_name": OrderedDict()
         }
 
-    def set_config(self, name_list: list, qconfig=get_default_qconfig("fbgemm")):
+
+    def set_config(self, config=get_default_qconfig("fbgemm")):
         '''
 
-        :param name_list: module names to apply quantization
-        :param qconfig: quantization configuration
+        :param config: quantization configuration
         :return: no return, update the qconfig_dict
         '''
-        self.name_list = name_list
-        self.qconfig = qconfig
+        self.qconfig = config
 
     @property
     def operatable(self):

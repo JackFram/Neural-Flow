@@ -10,3 +10,8 @@ class NetIntBase(object):
     def __len__(self):
         raise NotImplementedError
 
+    def get_feature_list(self):
+        raise NotImplementedError
+
+    def get_name_list(self):
+        raise NotImplementedError

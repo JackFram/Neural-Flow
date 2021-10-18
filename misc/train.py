@@ -14,10 +14,10 @@ parser = argparse.ArgumentParser(description='Network component importance ident
 
 # Model Args
 parser.add_argument('--model', default='resnet18', type=str)
-parser.add_argument('--ckpt_dir', default='./checkpoint', type=str, help='pretrained model dir or saving dir')
+parser.add_argument('--ckpt_dir', default='../../data/checkpoint', type=str, help='pretrained model dir or saving dir')
 # Data Args
 parser.add_argument('--dataset', default='cifar10', type=str)
-parser.add_argument('--dataroot', default='../data', type=str)
+parser.add_argument('--dataroot', default='../../data', type=str)
 # ML hyper-parameters
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
