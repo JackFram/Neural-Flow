@@ -1,10 +1,12 @@
 from model import ResNet18
 from netflow import *
 from metric import TopologySimilarity
-from opt import QuantizeOp
+from opt import QuantizeOp, PruningOp
 from dataset import get_dataset
 from cook.greedy import Greedy
 from misc.eval import eval
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 if __name__ == "__main__":
@@ -26,25 +28,29 @@ if __name__ == "__main__":
     feature_list = None
     name_list = None
 
-    for x, y in train_loader:
-        x = x.to(device)
-        flow.run(x)
-        feature_list = flow.get_feature_list()
-        name_list = flow.get_name_list()
-        break
+    x, y = next(iter(train_loader))
+    x = x.to(device)
+    flow.run(x)
+    feature_list = flow.get_feature_list()
+    name_list = flow.get_name_list()
 
-    ops = [QuantizeOp]
+    ops = [PruningOp]
 
     metric = TopologySimilarity()
 
-    chief = Greedy(
-        model=model,
-        ops=ops,
-        metric=metric,
-        flow=flow
-    )
-
-    model = chief.run(rate=1)
-
-    print(eval(model.to('cpu'), test_loader))
+    results = []
+    for i in np.arange(0, 0.8, 0.1):
+        chef = Greedy(
+            model=model,
+            ops=ops,
+            metric=metric,
+            flow=flow
+        )
+        model = chef.run(rate=i)
+        result = eval(model.to('cpu'), test_loader)
+        print(result[0])
+        results.append([i, result[0]])
+        
+    plt.plot(*np.array(results).T)
+    plt.savefig("out/plot.png")
 

@@ -26,8 +26,10 @@ class Greedy(CookBase):
                 for name in candidate:
                     idx = name_list.index(name)
                     score_list.append(self.metric.get_batch_score(feature_list[idx - 1], feature_list[idx]))
+                    #print(f"{name}: {score_list[-1]}")
                 if isinstance(op, QuantizeOp) or isinstance(op, PruningOp):
                     size = int(rate*len(candidate))
+                    print(f"operating on {size} layers")
                     if size:
                         sorted_index = list(reversed(np.argsort(score_list)))
                         sample = [candidate[sorted_index[i]] for i in range(size)]

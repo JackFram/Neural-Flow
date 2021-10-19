@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.utils.prune as prune
 
 class PruningOp(BaseOp):
-    def __init__(self, model: nn.Module, amount=0.9, method="random"):
+    def __init__(self, model: nn.Module, amount=0.8, method="l1"):
         super().__init__(model)
         self.op_name = "pruning"
         self.amount = amount
