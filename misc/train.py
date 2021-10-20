@@ -8,6 +8,9 @@ sys.path.append("../")
 
 from dataset import get_dataset
 from model import get_model
+from netflow import *
+from metric import TopologySimilarity
+import matplotlib.pyplot as plt
 
 
 parser = argparse.ArgumentParser(description='Network component importance identification')
@@ -22,6 +25,8 @@ parser.add_argument('--dataroot', default='../../data', type=str)
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--epoch_num', default=200, type=int, help='training epoch')
+parser.add_argument('--plot', default=True, help='plot score transformation along training')
+parser.add_argument('--plot_step', default=10, help='step size for plotting score transformation along training')
 
 args = parser.parse_args()
 args.model_path = os.path.join(args.ckpt_dir, "ckpt_{}_{}.pth".format(args.model, args.dataset))
@@ -42,9 +47,9 @@ def train(args):
         print('==> Resuming from checkpoint..')
         assert os.path.isdir(args.ckpt_dir), 'Error: no checkpoint file found!'
         checkpoint = torch.load(args.model_path)
-        net.load_state_dict(checkpoint['net'])
+        # net.load_state_dict(checkpoint['net'])
         best_acc = checkpoint['acc']
-        start_epoch = checkpoint['epoch']
+        # start_epoch = checkpoint['epoch']
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=args.lr,
@@ -104,6 +109,23 @@ def train(args):
                 os.mkdir(args.ckpt_dir)
             torch.save(state, args.model_path)
             best_acc = acc
+
+        if args.plot and epoch % args.plot_step == 0:
+            flow = FxInt(net)
+
+            x, y = next(iter(trainloader))
+            x = x.to(device)
+            flow.run(x)
+            feature_list = flow.get_feature_list()
+            name_list = flow.get_name_list()
+
+            metric = TopologySimilarity()
+
+            ret = metric.get_all_layer_batch_score(feature_list)
+            print(ret.shape)
+            exit(0)
+
+
 
         scheduler.step()
 
