@@ -6,10 +6,7 @@ from dataset import get_dataset
 from cook.greedy import Greedy
 from misc.eval import eval
 import numpy as np
-<<<<<<< HEAD
-=======
 import matplotlib.pyplot as plt
->>>>>>> 05c356d0c5d7e66942574fd5f9278d08eee192d7
 
 
 if __name__ == "__main__":
@@ -41,7 +38,6 @@ if __name__ == "__main__":
 
     metric = TopologySimilarity()
 
-<<<<<<< HEAD
     chief = Greedy(
         model=model,
         ops=ops,
@@ -54,23 +50,4 @@ if __name__ == "__main__":
         model = chief.run(rate=rate)
 
         print(eval(model.to(device), test_loader))
-
-
-=======
-    results = []
-    for i in np.arange(0, 0.8, 0.1):
-        chef = Greedy(
-            model=model,
-            ops=ops,
-            metric=metric,
-            flow=flow
-        )
-        model = chef.run(rate=i)
-        result = eval(model.to('cpu'), test_loader)
-        print(result[0])
-        results.append([i, result[0]])
-        
-    plt.plot(*np.array(results).T)
-    plt.savefig("out/plot.png")
->>>>>>> 05c356d0c5d7e66942574fd5f9278d08eee192d7
 
