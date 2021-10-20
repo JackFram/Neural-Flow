@@ -34,7 +34,6 @@ class PruningOp(BaseOp):
 
         return self.mod_model
 
-
     def _prune(self, module:nn.Module):
         if self.method == "l1":
             prune.l1_unstructured(module, 'weight', amount=self.amount)
