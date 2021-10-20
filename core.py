@@ -1,10 +1,11 @@
 from model import ResNet18
 from netflow import *
 from metric import TopologySimilarity
-from opt import QuantizeOp
+from opt import QuantizeOp, PruningOp
 from dataset import get_dataset
 from cook.greedy import Greedy
 from misc.eval import eval
+import numpy as np
 
 
 if __name__ == "__main__":
@@ -33,7 +34,7 @@ if __name__ == "__main__":
         name_list = flow.get_name_list()
         break
 
-    ops = [QuantizeOp]
+    ops = [PruningOp]
 
     metric = TopologySimilarity()
 
@@ -43,8 +44,12 @@ if __name__ == "__main__":
         metric=metric,
         flow=flow
     )
+    for rate in np.arange(0, 1, 0.05):
+        print("rate:%f "%rate)
 
-    model = chief.run(rate=1)
+        model = chief.run(rate=rate)
 
-    print(eval(model.to('cpu'), test_loader))
+        print(eval(model.to(device), test_loader))
+
+
 
