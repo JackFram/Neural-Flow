@@ -9,7 +9,9 @@ class Greedy(CookBase):
     def run(self, rate=0) -> nn.Module:
         model = self.model
         if self.metric is None:
-            for op in self.ops:
+            for Op in self.ops:
+                op = Op(model)
+                op.set_config()
                 candidate = op.operatable
                 sample = np.random.choice(candidate, size=int(rate*len(candidate)), replace=False)
                 model = op.apply(sample)
@@ -33,5 +35,6 @@ class Greedy(CookBase):
                     if size:
                         sorted_index = list(reversed(np.argsort(score_list)))
                         sample = [candidate[sorted_index[i]] for i in range(size)]
+                        print(sample)
                         model = op.apply(sample)
             return model

@@ -34,20 +34,51 @@ if __name__ == "__main__":
     feature_list = flow.get_feature_list()
     name_list = flow.get_name_list()
 
-    ops = [PruningOp]
+    ops = [QuantizeOp]
 
     metric = TopologySimilarity()
 
-    chief = Greedy(
+    chef = Greedy(
+        model=model,
+        ops=ops,
+        metric=None,
+        flow=flow
+    )
+
+    ret = []
+
+    for rate in np.arange(0, 1, 0.05):
+        print("rate:%f "%rate)
+
+        model_ = chef.run(rate=rate)
+
+        ret.append(eval(model_, test_loader, 'cpu')[0])
+
+    plt.plot(np.arange(0, 1, 0.05), ret, label="random")
+
+    chef = Greedy(
         model=model,
         ops=ops,
         metric=metric,
         flow=flow
     )
+
+    ret = []
+
     for rate in np.arange(0, 1, 0.05):
         print("rate:%f "%rate)
 
-        model = chief.run(rate=rate)
+        model_ = chef.run(rate=rate)
 
-        print(eval(model.to(device), test_loader))
+        ret.append(eval(model_, test_loader, 'cpu')[0])
+
+    plt.plot(np.arange(0, 1, 0.05), ret, label="TS")
+    #
+    plt.legend()
+
+    plt.savefig("./results/random_TS.pdf", bbox_inches="tight", dpi=500)
+
+
+
+
 

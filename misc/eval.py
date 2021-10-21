@@ -4,15 +4,15 @@ import sys
 sys.path.append("../")
 
 
-def eval(model: nn.Module, dataloader):
+def eval(model: nn.Module, dataloader, device):
     print('===== evaluating network ....... =====')
+    model.to(device)
     model.eval()
     test_loss = 0
     correct = 0
     total = 0
     batch_num = 0
     criterion = nn.CrossEntropyLoss()
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(dataloader):
             inputs, targets = inputs.to(device), targets.to(device)

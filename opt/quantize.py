@@ -54,6 +54,26 @@ class QuantizeOp(BaseOp):
             "module_name": OrderedDict()
         }
 
+    def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):
+        for name in name_list:
+
+            if name not in self.operatable:
+                print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
+                raise AttributeError
+
+            self.qconfig_dict["module_name"][name] = self.qconfig
+        model_to_quantize = copy.deepcopy(self.model)
+        if verbose:
+            print("model to qunatize:", model_to_quantize)
+        prepared_model = prepare_fx(model_to_quantize, self.qconfig_dict)
+        if verbose:
+            print("prepared model:", prepared_model)
+        self.mod_model = convert_fx(prepared_model)
+        if verbose:
+            print("quantized model", self.mod_model)
+        self.print_size()
+
+        return self.mod_model
 
     def set_config(self, config=get_default_qconfig("fbgemm")):
         '''
