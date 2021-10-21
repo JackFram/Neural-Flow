@@ -11,7 +11,6 @@ sys.path.append("../")
 class funcInterpreter(Interpreter):
     def __init__(self, module: GraphModule, garbage_collect_values: bool = True):
         self.feature_list = []
-        self.mod_feature_list = []
         super().__init__(module, garbage_collect_values=garbage_collect_values)
 
     def run_node(self, n : Node) -> Any:
@@ -40,17 +39,18 @@ class funcInterpreter(Interpreter):
             return list(self.args_iter)
         else:
             ret = next(self.args_iter)
-            self.feature_list.append((ret, name))
+            if name is not 'size':
+                self.feature_list.append((ret, name))
             return ret
 
     def call_method(self, target: 'Target', name, args: Tuple[Argument, ...], kwargs: Dict[str, Any]) -> Any:
         self_obj, *args_tail = args
-
         # Execute the method and return the result
         assert isinstance(target, str)
 
         ret = getattr(self_obj, target)(*args_tail, **kwargs)
-        self.feature_list.append((ret, name))
+        if name != 'size':
+            self.feature_list.append((ret, name))
         return ret
 
     def call_function(self, target : Target, name, args : Tuple[Argument, ...], kwargs : Dict[str, Any]) -> Any:
@@ -65,7 +65,6 @@ class funcInterpreter(Interpreter):
         submod = self.fetch_attr(target)
         ret = submod(*args, **kwargs)
         self.feature_list.append((ret, name))
-        self.mod_feature_list.append((ret, name))
         return ret
     
     def output(self, target: 'Target', name, args: Tuple[Argument, ...], kwargs: Dict[str, Any]) -> Any:
@@ -75,7 +74,7 @@ class funcInterpreter(Interpreter):
 class FxInt(NetIntBase):
     def __init__(self, module: nn.Module):
         super().__init__(module)
-        self.graph = symbolic_trace(module)
+        self.graph = symbolic_trace(module.eval())
         self.interp = funcInterpreter(self.graph)
 
     def run(self, input: torch.Tensor):

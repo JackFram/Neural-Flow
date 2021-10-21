@@ -4,13 +4,15 @@ import torch.optim as optim
 import argparse
 import os
 import sys
+import numpy as np
 sys.path.append("../")
 
 from dataset import get_dataset
 from model import get_model
 from netflow import *
 from metric import TopologySimilarity
-import matplotlib.pyplot as plt
+import seaborn as sns
+import matplotlib.pylab as plt
 
 
 parser = argparse.ArgumentParser(description='Network component importance identification')
@@ -41,6 +43,30 @@ def train(args):
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
     net.to(device)
+
+    flow = FxInt(net)
+
+    x, y = next(iter(trainloader))
+    x = x.to(device)
+    flow.run(x)
+    feature_list = flow.get_feature_list()
+    name_list = flow.get_name_list()
+
+    metric = TopologySimilarity()
+
+    ret = metric.get_all_layer_batch_score(feature_list)
+
+    labels = name_list
+
+    idx_list = np.arange(len(name_list))
+
+    ax = sns.heatmap(ret, linewidth=0.5)
+    ax.set_xticks(idx_list)
+    ax.set_yticks(idx_list)
+    ax.set_xticklabels(labels, fontsize=5)
+    ax.set_yticklabels(labels, fontsize=5)
+    plt.savefig("../results/{}_{}_topo_score.pdf".format(args.model, 0), bbox_inches="tight", dpi=500)
+    plt.clf()
 
     if args.resume:
         # Load checkpoint.
@@ -110,7 +136,8 @@ def train(args):
             torch.save(state, args.model_path)
             best_acc = acc
 
-        if args.plot and epoch % args.plot_step == 0:
+        if args.plot and epoch+1 % args.plot_step == 0:
+            print("Generating plot")
             flow = FxInt(net)
 
             x, y = next(iter(trainloader))
@@ -122,10 +149,18 @@ def train(args):
             metric = TopologySimilarity()
 
             ret = metric.get_all_layer_batch_score(feature_list)
-            print(ret.shape)
-            exit(0)
 
+            labels = name_list
 
+            idx_list = np.arange(len(name_list))
+
+            ax = sns.heatmap(ret, linewidth=0.5)
+            ax.set_xticks(idx_list)
+            ax.set_yticks(idx_list)
+            ax.set_xticklabels(labels, fontsize=5)
+            ax.set_yticklabels(labels, fontsize=5)
+            plt.savefig("../results/{}_{}_topo_score.pdf".format(args.model, epoch), bbox_inches="tight", dpi=500)
+            plt.clf()
 
         scheduler.step()
 
