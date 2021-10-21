@@ -44,6 +44,9 @@ def train(args):
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
     net.to(device)
 
+    #### plot ####
+    print("Generating plot")
+
     flow = FxInt(net)
 
     x, y = next(iter(trainloader))
@@ -67,6 +70,7 @@ def train(args):
     ax.set_yticklabels(labels, fontsize=5)
     plt.savefig("../results/{}_{}_topo_score.pdf".format(args.model, 0), bbox_inches="tight", dpi=500)
     plt.clf()
+    #### plot ####
 
     if args.resume:
         # Load checkpoint.
@@ -136,7 +140,7 @@ def train(args):
             torch.save(state, args.model_path)
             best_acc = acc
 
-        if args.plot and epoch+1 % args.plot_step == 0:
+        if args.plot and epoch % args.plot_step == 0:
             print("Generating plot")
             flow = FxInt(net)
 
@@ -159,7 +163,7 @@ def train(args):
             ax.set_yticks(idx_list)
             ax.set_xticklabels(labels, fontsize=5)
             ax.set_yticklabels(labels, fontsize=5)
-            plt.savefig("../results/{}_{}_topo_score.pdf".format(args.model, epoch), bbox_inches="tight", dpi=500)
+            plt.savefig("../results/{}_{}_topo_score.pdf".format(args.model, epoch+1), bbox_inches="tight", dpi=500)
             plt.clf()
 
         scheduler.step()
