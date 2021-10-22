@@ -76,7 +76,7 @@ if __name__ == "__main__":
     #
     plt.legend()
 
-    plt.savefig("./results/random_TS.pdf", bbox_inches="tight", dpi=500)
+    plt.savefig("./results/FT_random_TS.pdf", bbox_inches="tight", dpi=500)
 
 
 
