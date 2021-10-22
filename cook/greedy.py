@@ -15,7 +15,7 @@ class Greedy(CookBase):
                 candidate = op.operatable
                 size = int(rate*len(candidate))
                 if size:
-                    sample = np.random.choice(candidate, size=, replace=False)
+                    sample = np.random.choice(candidate, size, replace=False)
                     model = op.apply_with_finetune(sample)
             return model
 
