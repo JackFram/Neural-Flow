@@ -20,7 +20,7 @@ class QuantizeOp(BaseOp):
             "module_name": OrderedDict()
         }
 
-    def apply(self, name_list, verbose=False, *args, **kwargs):
+    def apply(self, name_list: list=None, verbose=False, *args, **kwargs):
 
         '''
 
@@ -30,14 +30,16 @@ class QuantizeOp(BaseOp):
         :param kwargs:
         :return:
         '''
+        if name_list is None:
+            self.qconfig_dict = {"object_type": [(nn.Linear, self.qconfig)]}
+        else:
+            for name in name_list:
 
-        for name in name_list:
+                if name not in self.operatable:
+                    print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
+                    raise AttributeError
 
-            if name not in self.operatable:
-                print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
-                raise AttributeError
-
-            self.qconfig_dict["module_name"][name] = self.qconfig
+                self.qconfig_dict["module_name"][name] = self.qconfig
         model_to_quantize = copy.deepcopy(self.model)
         if verbose:
             print("model to qunatize:", model_to_quantize)
