@@ -7,6 +7,7 @@ import random
 import sys
 import time
 import torch
+import inspect
 
 from opt import QuantizeOp, PruningOp
 from argparse import Namespace
@@ -69,22 +70,35 @@ def set_seed(seed):
     torch.manual_seed(seed)
 set_seed(42)
 
-tokenizer = BertTokenizer.from_pretrained(
-    configs.output_dir, do_lower_case=configs.do_lower_case)
+# tokenizer = BertTokenizer.from_pretrained(
+#     configs.output_dir, do_lower_case=configs.do_lower_case)
+#
+# model = BertForSequenceClassification.from_pretrained(configs.output_dir)
+# model.to(configs.device)
 
-model = BertForSequenceClassification.from_pretrained(configs.output_dir)
-model.to(configs.device)
+# quantized_model = torch.quantization.quantize_dynamic(
+#     model, {torch.nn.Linear}, dtype=torch.qint8
+# )
+# print(quantized_model)
 
-quantized_model = torch.quantization.quantize_dynamic(
-    model, {torch.nn.Linear}, dtype=torch.qint8
-)
-print(quantized_model)
+model = torch.hub.load('huggingface/transformers', 'modelForCausalLM', 'gpt2')
 
-# op = QuantizeOp(model)
-# op.set_config()
-# model_ = op.apply()
+# fn_for_analysis = inspect.unwrap(type(model).forward)
+# co = fn_for_analysis.__code__
+# total_args = co.co_argcount + co.co_kwonlyargcount
+# orig_args = list(co.co_varnames)
+# names_iter = iter(co.co_varnames)
+# print(orig_args)
 
+# I have modified here in File
+# "/home/ubuntu/anaconda3/envs/nf/lib/python3.7/site-packages/torch/fx/symbolic_trace.py"
+# in Tracer.get_args_for_root
+# arg_names.remove('input_ids')
+# print(arg_names)
 
+op = QuantizeOp(model)
+op.set_config()
+model_ = op.apply()
 
 
 # coding=utf-8
