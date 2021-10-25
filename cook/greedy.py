@@ -13,8 +13,10 @@ class Greedy(CookBase):
                 op = Op(model)
                 op.set_config()
                 candidate = op.operatable
-                sample = np.random.choice(candidate, size=int(rate*len(candidate)), replace=False)
-                model = op.apply_with_finetune(sample)
+                sample_size = int(rate*len(candidate))
+                if sample_size:
+                    sample = np.random.choice(candidate, size=int(rate*len(candidate)), replace=False)
+                    model = op.apply_with_finetune(sample)
             return model
 
         else:

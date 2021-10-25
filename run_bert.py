@@ -92,7 +92,7 @@ model = torch.hub.load('huggingface/transformers', 'modelForCausalLM', 'gpt2')
 
 # I have modified here in File
 # "/home/ubuntu/anaconda3/envs/nf/lib/python3.7/site-packages/torch/fx/symbolic_trace.py"
-# in Tracer.get_args_for_root
+# in Tracer.trace
 # arg_names.remove('input_ids')
 # print(arg_names)
 
