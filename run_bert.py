@@ -7,9 +7,7 @@ import random
 import sys
 import time
 import torch
-import inspect
 
-from opt import QuantizeOp, PruningOp
 from argparse import Namespace
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
@@ -19,6 +17,8 @@ from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_output_modes as output_modes
 from transformers import glue_processors as processors
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
+
+from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -70,36 +70,11 @@ def set_seed(seed):
     torch.manual_seed(seed)
 set_seed(42)
 
-# tokenizer = BertTokenizer.from_pretrained(
-#     configs.output_dir, do_lower_case=configs.do_lower_case)
-#
-# model = BertForSequenceClassification.from_pretrained(configs.output_dir)
-# model.to(configs.device)
+tokenizer = BertTokenizer.from_pretrained(
+    configs.output_dir, do_lower_case=configs.do_lower_case)
 
-# quantized_model = torch.quantization.quantize_dynamic(
-#     model, {torch.nn.Linear}, dtype=torch.qint8
-# )
-# print(quantized_model)
-
-model = torch.hub.load('huggingface/transformers', 'modelForCausalLM', 'gpt2')
-
-# fn_for_analysis = inspect.unwrap(type(model).forward)
-# co = fn_for_analysis.__code__
-# total_args = co.co_argcount + co.co_kwonlyargcount
-# orig_args = list(co.co_varnames)
-# names_iter = iter(co.co_varnames)
-# print(orig_args)
-
-# I have modified here in File
-# "/home/ubuntu/anaconda3/envs/nf/lib/python3.7/site-packages/torch/fx/symbolic_trace.py"
-# in Tracer.trace
-# arg_names.remove('input_ids')
-# print(arg_names)
-
-op = QuantizeOp(model)
-op.set_config()
-model_ = op.apply()
-
+model = BertForSequenceClassification.from_pretrained(configs.output_dir)
+model.to(configs.device)
 
 # coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
@@ -116,6 +91,7 @@ model_ = op.apply()
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 
 def evaluate(args, model, tokenizer, prefix=""):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
@@ -213,9 +189,9 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
                                                 label_list=label_list,
                                                 max_length=args.max_seq_length,
                                                 output_mode=output_mode,
-                                                pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-                                                pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-                                                pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
+                                                # pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
+                                                # pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
+                                                # pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
         )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
@@ -235,4 +211,39 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
 
     dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
     return dataset
+
+qconfig = get_default_qconfig("fbgemm")
+
+for name, module in model.named_modules():
+    print(name)
+
+quantized_model = torch.quantization.quantize_dynamic(
+    model, {"bert.encoder.layer.0.attention.self.query": qconfig}  # , dtype=torch.qint8
+)
+
+print(quantized_model)
+
+
+def print_size_of_model(model):
+    torch.save(model.state_dict(), "temp.p")
+    print('Size (MB):', os.path.getsize("temp.p")/1e6)
+    os.remove('temp.p')
+
+print_size_of_model(model)
+print_size_of_model(quantized_model)
+
+
+def time_model_evaluation(model, configs, tokenizer):
+    eval_start_time = time.time()
+    result = evaluate(configs, model, tokenizer, prefix="")
+    eval_end_time = time.time()
+    eval_duration_time = eval_end_time - eval_start_time
+    print(result)
+    print("Evaluate total time (seconds): {0:.1f}".format(eval_duration_time))
+
+# Evaluate the original FP32 BERT model
+time_model_evaluation(model, configs, tokenizer)
+
+# Evaluate the INT8 BERT model after the dynamic quantization
+time_model_evaluation(quantized_model, configs, tokenizer)
 
