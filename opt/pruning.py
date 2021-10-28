@@ -35,6 +35,19 @@ class PruningOp(BaseOp):
 
         return self.mod_model
 
+    def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):
+        mod_model = self.apply(name_list)
+
+        print("Finetuning...")
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        mod_model.to(device)
+        criterion = nn.CrossEntropyLoss()
+        optimizer_ft = optim.SGD(mod_model.parameters(), lr=1e-3, momentum=0.9, weight_decay=0.1)
+        exp_lr_scheduler = optim.lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.3)
+        self.mod_model = train_model(mod_model, criterion, optimizer_ft, exp_lr_scheduler,
+                                     num_epochs=2, device=device)
+        return self.mod_model
+
     def _prune(self, module:nn.Module):
         if self.method == "l1":
             prune.l1_unstructured(module, 'weight', amount=self.amount)

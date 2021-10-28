@@ -212,16 +212,21 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
     return dataset
 
-qconfig = get_default_qconfig("fbgemm")
+# qconfig = get_default_qconfig("fbgemm")
+#
+# for name, module in model.named_modules():
+#     print(name)
+#
+# quantized_model = torch.quantization.quantize_dynamic(
+#     model, {"bert.encoder.layer.0.attention.self.query": qconfig}  # , dtype=torch.qint8
+# )
+#
+# print(quantized_model)
 
-for name, module in model.named_modules():
-    print(name)
+from opt import PruningOp
 
-quantized_model = torch.quantization.quantize_dynamic(
-    model, {"bert.encoder.layer.0.attention.self.query": qconfig}  # , dtype=torch.qint8
-)
-
-print(quantized_model)
+op = PruningOp(model)
+quantized_model = op.apply(name_list=op.operatable)
 
 
 def print_size_of_model(model):

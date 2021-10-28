@@ -38,3 +38,36 @@ class Cifar10:
 
     def get_test_loader(self):
         return self.testloader
+
+
+class ImageNet:
+    def __init__(self, root_dir="./data"):
+        self.transform_train = transforms.Compose([
+            transforms.RandomSizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        ])
+
+        self.transform_test = transforms.Compose([
+            transforms.Scale(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        ])
+
+        self.trainset = torchvision.datasets.ImageFolder(
+            root=root_dir, transform=self.transform_train)
+        self.trainloader = torch.utils.data.DataLoader(
+            self.trainset, batch_size=128, shuffle=True, num_workers=2)
+
+        self.testset = torchvision.datasets.ImageFolder(
+            root=root_dir, transform=self.transform_test)
+        self.testloader = torch.utils.data.DataLoader(
+            self.testset, batch_size=100, shuffle=False, num_workers=2)
+
+    def get_train_loader(self):
+        return self.trainloader
+
+    def get_test_loader(self):
+        return self.testloader
