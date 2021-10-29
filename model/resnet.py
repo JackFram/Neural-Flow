@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 
 class BasicBlock(nn.Module):
-    expansion = 49
+    expansion = 1
 
     def __init__(self, in_planes, planes, stride=1):
         super(BasicBlock, self).__init__()
@@ -71,7 +71,7 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=16):
+    def __init__(self, block, num_blocks, num_classes=10):
         super(ResNet, self).__init__()
         self.in_planes = 64
 
