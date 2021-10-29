@@ -51,7 +51,7 @@ class ImageNet16:
         ])
 
         self.transform_test = transforms.Compose([
-            transforms.Scale(256),
+            transforms.Resize(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
@@ -60,12 +60,12 @@ class ImageNet16:
         self.trainset = ImageNet16Data(
             root=root_dir, train=True, transform=self.transform_train)
         self.trainloader = torch.utils.data.DataLoader(
-            self.trainset, batch_size=128, shuffle=True, num_workers=2)
+            self.trainset, batch_size=32, shuffle=True, num_workers=2)
 
         self.testset = ImageNet16Data(
             root=root_dir, train=False, transform=self.transform_test)
         self.testloader = torch.utils.data.DataLoader(
-            self.testset, batch_size=100, shuffle=False, num_workers=2)
+            self.testset, batch_size=25, shuffle=False, num_workers=2)
 
     def get_train_loader(self):
         return self.trainloader
