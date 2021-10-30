@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 
 class BasicBlock(nn.Module):
-    expansion = 49
+    expansion = 1
 
     def __init__(self, in_planes, planes, stride=1):
         super(BasicBlock, self).__init__()
