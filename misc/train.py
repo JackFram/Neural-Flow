@@ -45,7 +45,7 @@ dataloaders = {"train": trainloader, "val": testloader}
 
 
 def train(args):
-    net = get_model(args.model)
+    net = get_model(args.model, num_classes=data.get_class_num())
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch

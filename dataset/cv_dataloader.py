@@ -39,31 +39,39 @@ class Cifar10:
 
     def get_test_loader(self):
         return self.testloader
+    
+    def get_class_num(self):
+        return len(self.classes)
 
 
 class ImageNet16:
-    def __init__(self, root_dir="./data"):
+    def __init__(self, root_dir="./data", class_num=120):
+        self.class_num = class_num
+
+        mean = [x / 255 for x in [122.68, 116.66, 104.01]]
+        std  = [x / 255 for x in [63.22,  61.26 , 65.09]]
+
         self.transform_train = transforms.Compose([
-            transforms.RandomResizedCrop(224),
+            transforms.RandomCrop(16, padding=2),
+            transforms.Resize(32),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+            transforms.Normalize(mean,std),
         ])
 
         self.transform_test = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
+            transforms.Resize(32),
             transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+            transforms.Normalize(mean,std),
         ])
 
         self.trainset = ImageNet16Data(
-            root=root_dir, train=True, transform=self.transform_train)
+            root=root_dir, train=True, transform=self.transform_train, use_num_of_class_only=class_num)
         self.trainloader = torch.utils.data.DataLoader(
             self.trainset, batch_size=256, shuffle=True, num_workers=2)
 
         self.testset = ImageNet16Data(
-            root=root_dir, train=False, transform=self.transform_test)
+            root=root_dir, train=False, transform=self.transform_test, use_num_of_class_only=class_num)
         self.testloader = torch.utils.data.DataLoader(
             self.testset, batch_size=200, shuffle=False, num_workers=2)
 
@@ -72,3 +80,6 @@ class ImageNet16:
 
     def get_test_loader(self):
         return self.testloader
+
+    def get_class_num(self):
+        return self.class_num

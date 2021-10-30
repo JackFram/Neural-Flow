@@ -18,11 +18,11 @@ from .dla_simple import *
 from .dla import *
 
 
-def get_model(name: str) -> nn.Module:
+def get_model(name: str, num_classes: int) -> nn.Module:
     print('===== {} model loading.. ====='.format(name))
     if name == 'vgg':
         return VGG('VGG19')
     elif name == 'resnet18':
-        return ResNet18()
+        return ResNet18(num_classes)
     elif name == 'mobile_net':
         return MobileNet()
