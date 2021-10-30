@@ -36,7 +36,7 @@ class PruningOp(BaseOp):
         return self.mod_model
 
     def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):
-        mod_model = self.apply(name_list)
+        mod_model = self.apply(name_list, verbose)
 
         print("Finetuning...")
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
