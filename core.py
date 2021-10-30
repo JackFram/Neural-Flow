@@ -6,7 +6,8 @@ from dataset import get_dataset
 from cook.greedy import Greedy
 from misc.eval import eval
 import numpy as np
-import matplotlib.pyplot as plt
+import seaborn as sns
+import matplotlib.pylab as plt
 
 
 if __name__ == "__main__":
@@ -30,53 +31,70 @@ if __name__ == "__main__":
 
     x, y = next(iter(train_loader))
     x = x.to(device)
+    x = torch.randn(128, 3, 32, 32).to(device)
     flow.run(x)
     feature_list = flow.get_feature_list()
     name_list = flow.get_name_list()
 
-    ops = [QuantizeOp]
-
     metric = TopologySimilarity()
 
-    chef = Greedy(
-        model=model,
-        ops=ops,
-        metric=None,
-        flow=flow
-    )
+    ret = metric.get_all_layer_batch_score(feature_list)
 
-    ret = []
+    labels = name_list
 
-    for rate in np.arange(0, 1, 0.05):
-        print("rate:%f "%rate)
+    idx_list = np.arange(len(name_list))
 
-        model_ = chef.run(rate=rate)
+    ax = sns.heatmap(ret, linewidth=0.5)
+    ax.set_xticks(idx_list)
+    ax.set_yticks(idx_list)
+    ax.set_xticklabels(labels, fontsize=5)
+    ax.set_yticklabels(labels, fontsize=5)
+    plt.savefig("./results/{}_topo_score.pdf".format("OOD"), bbox_inches="tight", dpi=500)
+    plt.clf()
 
-        ret.append(eval(model_, test_loader, 'cpu')[0])
-
-    plt.plot(np.arange(0, 1, 0.05), ret, label="random")
-
-    chef = Greedy(
-        model=model,
-        ops=ops,
-        metric=metric,
-        flow=flow
-    )
-
-    ret = []
-
-    for rate in np.arange(0, 1, 0.05):
-        print("rate:%f "%rate)
-
-        model_ = chef.run(rate=rate)
-
-        ret.append(eval(model_, test_loader, 'cpu')[0])
-
-    plt.plot(np.arange(0, 1, 0.05), ret, label="TS")
+    # ops = [QuantizeOp]
     #
-    plt.legend()
-
-    plt.savefig("./results/FT_random_TS.pdf", bbox_inches="tight", dpi=500)
+    # metric = TopologySimilarity()
+    #
+    # chef = Greedy(
+    #     model=model,
+    #     ops=ops,
+    #     metric=None,
+    #     flow=flow
+    # )
+    #
+    # ret = []
+    #
+    # for rate in np.arange(0, 1, 0.05):
+    #     print("rate:%f "%rate)
+    #
+    #     model_ = chef.run(rate=rate)
+    #
+    #     ret.append(eval(model_, test_loader, 'cpu')[0])
+    #
+    # plt.plot(np.arange(0, 1, 0.05), ret, label="random")
+    #
+    # chef = Greedy(
+    #     model=model,
+    #     ops=ops,
+    #     metric=metric,
+    #     flow=flow
+    # )
+    #
+    # ret = []
+    #
+    # for rate in np.arange(0, 1, 0.05):
+    #     print("rate:%f "%rate)
+    #
+    #     model_ = chef.run(rate=rate)
+    #
+    #     ret.append(eval(model_, test_loader, 'cpu')[0])
+    #
+    # plt.plot(np.arange(0, 1, 0.05), ret, label="TS")
+    # #
+    # plt.legend()
+    #
+    # plt.savefig("./results/FT_random_TS.pdf", bbox_inches="tight", dpi=500)
 
 
 
