@@ -126,9 +126,9 @@ model = BertForSequenceClassification.from_pretrained(configs.output_dir)
 
 # Pruning
 
-from opt import PruningOp
+from opt import PruningOp, SPruningOp
 
-op = PruningOp(model)
+op = SPruningOp(model)
 mod_model = op.apply(name_list=op.operatable)
 
 

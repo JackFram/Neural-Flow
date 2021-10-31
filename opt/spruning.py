@@ -1,4 +1,3 @@
-
 from .base import BaseOp
 from netflow import *
 
@@ -9,10 +8,10 @@ import torch.optim as optim
 from misc.train import train_model
 
 
-class PruningOp(BaseOp):
+class SPruningOp(BaseOp):
     def __init__(self, model: nn.Module, amount=0.8, method="l1"):
         super().__init__(model)
-        self.op_name = "unstructured pruning"
+        self.op_name = "structured pruning"
         self.amount = amount
         self.method = method
         self.config = None
@@ -24,13 +23,13 @@ class PruningOp(BaseOp):
                 print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
                 raise AttributeError
             name_set.add(name)
-            
+
         model_to_prune = copy.deepcopy(self.model)
         for mod_name, mod in model_to_prune.named_modules():
             if mod_name in name_set:
                 if verbose:
                     print(f"Module weights before pruning: {list(mod.named_parameters())}")
-                self._prune(mod)
+                mod = self._prune(mod)
                 if verbose:
                     print(f"Module weights after pruning: {list(mod.named_parameters())}")
         self.mod_model = model_to_prune
@@ -50,12 +49,15 @@ class PruningOp(BaseOp):
                                      num_epochs=2, device=device)
         return self.mod_model
 
-    def _prune(self, module:nn.Module):
+    def _prune(self, module: nn.Module):
         if self.method == "l1":
-            prune.l1_unstructured(module, 'weight', amount=self.amount)
-        elif self.method == "random":
-            prune.random_unstructured(module, 'weight', amount=self.amount)
-
+            prune.ln_structured(
+                module, 'weight', amount=self.amount, dim=1, n=1
+            )
+        elif self.method == "l2":
+            prune.ln_structured(
+                module, 'weight', amount=self.amount, dim=1, n=2
+            )
         prune.remove(module, 'weight')
 
     def set_config(self, config={}):
