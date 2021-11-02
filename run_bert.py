@@ -13,7 +13,7 @@ from transformers import glue_processors as processors
 
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
 from misc.train_bert import train_bert, time_model_evaluation
-from utils import print_size_of_model
+from utils import print_size_of_model, avg_deviation
 
 
 # Setup logging
@@ -113,33 +113,57 @@ model = BertForSequenceClassification.from_pretrained(configs.output_dir)
 # limitations under the License.
 
 # Quantization
-# qconfig = get_default_qconfig("fbgemm")
+qconfig = get_default_qconfig("fbgemm")
 
 # for name, module in model.named_modules():
 #     print(name)
 
-# quantized_model = torch.quantization.quantize_dynamic(
-#     model, {nn.Linear: qconfig}  # , dtype=torch.qint8
-# )
+mod_model = torch.quantization.quantize_dynamic(
+    model, {nn.Linear}, dtype=torch.qint8  # qint8, float16, quint8
+)
 
-# print(quantized_model)
+model_list = []
+mod_model_list = []
 
-# Pruning
+for name, module in model.named_modules():
+    if isinstance(module, nn.Linear):
+        # print(name, module.weight.detach().numpy().shape)
+        model_list.append(module.weight.detach().numpy())
 
-from opt import PruningOp, SPruningOp
+for name, module in mod_model.named_modules():
+    if isinstance(module, nn.quantized.dynamic.modules.linear.Linear):
+        # print(name, module.weight().dequantize().detach().numpy().shape)
+        mod_model_list.append(module.weight().dequantize().detach().numpy())
 
-op = SPruningOp(model)
-mod_model = op.apply(name_list=op.operatable)
+sum = 0
+
+for i in range(len(model_list)):
+    t = avg_deviation(model_list[i], mod_model_list[i])
+    sum += t
+    print(t)
+
+print(sum)
 
 
+
+
+
+# ####### Pruning ##########
+#
+# from opt import PruningOp, SPruningOp
+#
+# op = SPruningOp(model)
+# mod_model = op.apply(name_list=op.operatable)
+#
+#
 print_size_of_model(model)
 print_size_of_model(mod_model)
-
-# Evaluate the original FP32 BERT model
-time_model_evaluation(model, configs, tokenizer, logger)
-time_model_evaluation(mod_model, configs, tokenizer, logger)
-
-# Evaluate the INT8 BERT model after the dynamic quantization
-train_bert(configs, mod_model, tokenizer, logger)
-time_model_evaluation(mod_model, configs, tokenizer, logger)
-
+#
+# # Evaluate the original FP32 BERT model
+# time_model_evaluation(model, configs, tokenizer, logger)
+# time_model_evaluation(mod_model, configs, tokenizer, logger)
+#
+# # Evaluate the INT8 BERT model after the dynamic quantization
+# train_bert(configs, mod_model, tokenizer, logger)
+# time_model_evaluation(mod_model, configs, tokenizer, logger)
+# ####### End of Pruning ##########

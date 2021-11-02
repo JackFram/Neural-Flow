@@ -78,7 +78,7 @@ class QuantizeOp(BaseOp):
         optimizer_ft = optim.SGD(prepared_model.parameters(), lr=1e-3, momentum=0.9, weight_decay=0.1)
         exp_lr_scheduler = optim.lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.3)
         prepared_model = train_model(prepared_model, criterion, optimizer_ft, exp_lr_scheduler,
-                                     num_epochs=10, device=device)
+                                     num_epochs=2, device=device)
 
         if verbose:
             print("prepared model:", prepared_model)
