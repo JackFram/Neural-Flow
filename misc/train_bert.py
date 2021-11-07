@@ -265,4 +265,5 @@ def time_model_evaluation(model, configs, tokenizer, logger):
     eval_duration_time = eval_end_time - eval_start_time
     print(result)
     print("Evaluate total time (seconds): {0:.1f}".format(eval_duration_time))
+    return result
 

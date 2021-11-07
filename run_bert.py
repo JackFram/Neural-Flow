@@ -13,7 +13,9 @@ from transformers import glue_processors as processors
 
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
 from misc.train_bert import train_bert, time_model_evaluation
-from utils import print_size_of_model, avg_deviation
+from utils import print_size_of_model, model_deviation
+import seaborn as sns
+import matplotlib.pylab as plt
 
 
 # Setup logging
@@ -113,51 +115,72 @@ model = BertForSequenceClassification.from_pretrained(configs.output_dir)
 # limitations under the License.
 
 # Quantization
-qconfig = get_default_qconfig("fbgemm")
+# qconfig = get_default_qconfig("fbgemm")
 
 # for name, module in model.named_modules():
 #     print(name)
 
-mod_model = torch.quantization.quantize_dynamic(
-    model, {nn.Linear}, dtype=torch.qint8  # qint8, float16, quint8
-)
-
-model_list = []
-mod_model_list = []
-
-for name, module in model.named_modules():
-    if isinstance(module, nn.Linear):
-        # print(name, module.weight.detach().numpy().shape)
-        model_list.append(module.weight.detach().numpy())
-
-for name, module in mod_model.named_modules():
-    if isinstance(module, nn.quantized.dynamic.modules.linear.Linear):
-        # print(name, module.weight().dequantize().detach().numpy().shape)
-        mod_model_list.append(module.weight().dequantize().detach().numpy())
-
-sum = 0
-
-for i in range(len(model_list)):
-    t = avg_deviation(model_list[i], mod_model_list[i])
-    sum += t
-    print(t)
-
-print(sum)
-
+# mod_model = torch.quantization.quantize_dynamic(
+#     model, {nn.Linear}, dtype=torch.qint8  # qint8, float16, quint8
+# )
 
 
 
 
 # ####### Pruning ##########
 #
-# from opt import PruningOp, SPruningOp
+from opt import PruningOp, SPruningOp
+
+print("num labels: {}".format(num_labels))
+
+acc = []
+f1 = []
+acc_f1 = []
+dev = []
+
+for rate in np.arange(0, 1.05, 0.05):
+    print("rate:%f "%rate)
+    op = PruningOp(model, amount=rate)
+    mod_model = op.apply(name_list=op.operatable)
+    results = time_model_evaluation(mod_model, configs, tokenizer, logger)
+    acc.append(results["acc"])
+    f1.append(results["f1"])
+    acc_f1.append(results["acc_and_f1"])
+    dev.append(model_deviation(model, mod_model.to("cpu")))
+
+# plt.plot(np.arange(0, 1.05, 0.05), acc, label="acc")
+# plt.plot(np.arange(0, 1.05, 0.05), f1, label="f1")
+# plt.plot(np.arange(0, 1.05, 0.05), acc_f1, label="acc+f1")
+# plt.plot(np.arange(0, 1.05, 0.05), dev, label="deviation")
+# plt.savefig("./results/dev.pdf", bbox_inches="tight", dpi=500)
+
+# Create some mock data
+t = np.arange(0, 1.05, 0.05)
+
+fig, ax1 = plt.subplots()
+
+color = 'tab:red'
+ax1.set_xlabel('pruning rate')
+ax1.set_ylabel('accuracy and f1')
+ax1.plot(t, acc, label="acc")
+ax1.plot(t, f1, label="f1")
+ax1.plot(t, acc_f1, label="acc+f1")
+ax1.tick_params(axis='y')
+
+ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+
+color = 'tab:blue'
+ax2.set_ylabel('deviation')  # we already handled the x-label with ax1
+ax2.plot(t, dev)
+ax2.tick_params(axis='y')
+
+fig.tight_layout()  # otherwise the right y-label is slightly clipped
+plt.legend()
+plt.savefig("./results/dev.pdf", bbox_inches="tight", dpi=500)
 #
-# op = SPruningOp(model)
-# mod_model = op.apply(name_list=op.operatable)
 #
-#
-print_size_of_model(model)
-print_size_of_model(mod_model)
+# print_size_of_model(model)
+# print_size_of_model(mod_model)
 #
 # # Evaluate the original FP32 BERT model
 # time_model_evaluation(model, configs, tokenizer, logger)
