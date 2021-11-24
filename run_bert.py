@@ -12,7 +12,7 @@ from transformers import glue_output_modes as output_modes
 from transformers import glue_processors as processors
 
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
-from misc.train_bert import train_bert, time_model_evaluation
+from misc.train_bert import train_bert, time_model_evaluation, get_bert_FIM
 from utils import print_size_of_model, model_deviation
 import seaborn as sns
 import matplotlib.pylab as plt
@@ -83,110 +83,98 @@ tokenizer = BertTokenizer.from_pretrained(
 
 model = BertForSequenceClassification.from_pretrained(configs.output_dir)
 
-# args = parse_args()
-#
-# config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
-#
-#
-# tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer)
-# model = AutoModelForSequenceClassification.from_pretrained(
-#     args.model_name_or_path,
-#     from_tf=bool(".ckpt" in args.model_name_or_path),
-#     config=config,
-# )
-# model.to('cpu')
-
-# train_bert(args, model, tokenizer)
-
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # Quantization
+from opt import BertQuantizeOp
+op = BertQuantizeOp(model)
+op.set_config()
+mod_model, diff = op.apply(name_list=op.operatable[:1], verbose=False, with_diff=True)
+param = diff[op.operatable[0]]
+FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
+print(param[:20], FIM[:20])
+
 # qconfig = get_default_qconfig("fbgemm")
-
-# for name, module in model.named_modules():
-#     print(name)
-
+#
 # mod_model = torch.quantization.quantize_dynamic(
 #     model, {nn.Linear}, dtype=torch.qint8  # qint8, float16, quint8
 # )
+#
+# for name, module in mod_model.named_modules():
+#     if isinstance(module, nn.quantized.dynamic.modules.linear.Linear):
+#         print(name, module.bias().dequantize().data.cpu().numpy().flatten().shape)
 
-
+# for name, module in model.named_modules():
+#     if isinstance(module, nn.Linear):
+#         print(name)
 
 
 # ####### Pruning ##########
+
+# from opt import PruningOp, SPruningOp
 #
-from opt import PruningOp, SPruningOp
+# print("num labels: {}".format(num_labels))
+#
+# acc = []
+# f1 = []
+# acc_f1 = []
+# dev = []
+#
+# for rate in np.arange(1, 1.05, 0.05):
+#     print("rate:%f "%rate)
+#     op = PruningOp(model, amount=rate)
+#     mod_model, diff = op.apply(name_list=op.operatable[:1], verbose=False, with_diff=True)
+#     FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
+#     param = diff[op.operatable[0]]
+#     print(param.shape, FIM.shape)
+#     exit(0)
+#     train_bert(configs, mod_model, tokenizer, logger)
+#     results = time_model_evaluation(mod_model, configs, tokenizer, logger)
+#     acc.append(results["acc"])
+#     f1.append(results["f1"])
+#     acc_f1.append(results["acc_and_f1"])
+#     dev.append(model_deviation(model, mod_model.to("cpu")))
 
-print("num labels: {}".format(num_labels))
 
-acc = []
-f1 = []
-acc_f1 = []
-dev = []
 
-for rate in np.arange(0, 1.05, 0.05):
-    print("rate:%f "%rate)
-    op = PruningOp(model, amount=rate)
-    mod_model = op.apply(name_list=op.operatable)
-    results = time_model_evaluation(mod_model, configs, tokenizer, logger)
-    acc.append(results["acc"])
-    f1.append(results["f1"])
-    acc_f1.append(results["acc_and_f1"])
-    dev.append(model_deviation(model, mod_model.to("cpu")))
-
-# plt.plot(np.arange(0, 1.05, 0.05), acc, label="acc")
-# plt.plot(np.arange(0, 1.05, 0.05), f1, label="f1")
-# plt.plot(np.arange(0, 1.05, 0.05), acc_f1, label="acc+f1")
-# plt.plot(np.arange(0, 1.05, 0.05), dev, label="deviation")
-# plt.savefig("./results/dev.pdf", bbox_inches="tight", dpi=500)
-
-# Create some mock data
-t = np.arange(0, 1.05, 0.05)
-
-fig, ax1 = plt.subplots()
-
-color = 'tab:red'
-ax1.set_xlabel('pruning rate')
-ax1.set_ylabel('accuracy and f1')
-ax1.plot(t, acc, label="acc")
-ax1.plot(t, f1, label="f1")
-ax1.plot(t, acc_f1, label="acc+f1")
-ax1.tick_params(axis='y')
-
-ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-
-color = 'tab:blue'
-ax2.set_ylabel('deviation')  # we already handled the x-label with ax1
-ax2.plot(t, dev)
-ax2.tick_params(axis='y')
-
-fig.tight_layout()  # otherwise the right y-label is slightly clipped
-plt.legend()
-plt.savefig("./results/dev.pdf", bbox_inches="tight", dpi=500)
+#
+# # plt.plot(np.arange(0, 1.05, 0.05), acc, label="acc")
+# # plt.plot(np.arange(0, 1.05, 0.05), f1, label="f1")
+# # plt.plot(np.arange(0, 1.05, 0.05), acc_f1, label="acc+f1")
+# # plt.plot(np.arange(0, 1.05, 0.05), dev, label="deviation")
+# # plt.savefig("./results/dev.pdf", bbox_inches="tight", dpi=500)
+#
+# # Create some mock data
+# t = np.arange(0, 1.05, 0.05)
+#
+# fig, ax1 = plt.subplots()
+#
+# color = 'tab:red'
+# ax1.set_xlabel('pruning rate')
+# ax1.set_ylabel('accuracy and f1')
+# ax1.plot(t, acc, label="acc")
+# ax1.plot(t, f1, label="f1")
+# ax1.plot(t, acc_f1, label="acc+f1")
+# ax1.tick_params(axis='y')
+# ax1.legend(loc='center left')
+#
+#
+# ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+#
+# color = 'tab:blue'
+# ax2.set_ylabel('deviation')  # we already handled the x-label with ax1
+# ax2.plot(t, dev, label="deviation")
+# ax2.tick_params(axis='y')
+# ax2.legend(loc='center right')
+#
+# fig.tight_layout()  # otherwise the right y-label is slightly clipped
+# plt.savefig("./results/ft_sprune_l1_dev.pdf", bbox_inches="tight", dpi=500)
 #
 #
 # print_size_of_model(model)
 # print_size_of_model(mod_model)
 #
-# # Evaluate the original FP32 BERT model
 # time_model_evaluation(model, configs, tokenizer, logger)
 # time_model_evaluation(mod_model, configs, tokenizer, logger)
 #
-# # Evaluate the INT8 BERT model after the dynamic quantization
 # train_bert(configs, mod_model, tokenizer, logger)
 # time_model_evaluation(mod_model, configs, tokenizer, logger)
 # ####### End of Pruning ##########

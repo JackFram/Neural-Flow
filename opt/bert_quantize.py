@@ -11,14 +11,14 @@ from torch.quantization.quantize_fx import prepare_fx, convert_fx
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
 
 
-class QuantizeOp(BaseOp):
+class BertQuantizeOp(BaseOp):
     def __init__(self, model: nn.Module):
         super().__init__(model)
         self.op_name = "quantize"
         self.qconfig = None
         self.name_list = None
         self.qconfig_dict = {
-            "module_name": OrderedDict()
+
         }
 
     def apply(self, name_list: list=None, verbose=False, with_diff=False, *args, **kwargs):
@@ -35,7 +35,7 @@ class QuantizeOp(BaseOp):
         diff = {}
         if name_list is None:
             name_list = self.operatable
-            self.qconfig_dict = {"object_type": [(nn.Linear, self.qconfig)]}
+            self.qconfig_dict = {nn.Linear: self.qconfig}
         else:
             for name in name_list:
 
@@ -43,19 +43,12 @@ class QuantizeOp(BaseOp):
                     print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
                     raise AttributeError
 
-                self.qconfig_dict["module_name"][name] = self.qconfig
-        model_to_quantize = copy.deepcopy(self.model)
+                self.qconfig_dict[name] = self.qconfig
+        self.mod_model = torch.quantization.quantize_dynamic(
+            self.model, self.qconfig_dict # qint8, float16, quint8
+        )
         if verbose:
-            print("model to qunatize:", model_to_quantize)
-        prepared_model = prepare_fx(model_to_quantize, self.qconfig_dict)
-        if verbose:
-            print("prepared model:", prepared_model)
-        self.mod_model = convert_fx(prepared_model)
-        if with_diff:
-            for name, module in self.mod_model.named_modules():
-                print(name)
-            print("Wait for further updates")
-            exit(0)
+            print("model to qunatize:", self.model)
         if verbose:
             print("quantized model", self.mod_model)
         self.print_size()
@@ -67,9 +60,9 @@ class QuantizeOp(BaseOp):
                 if hasattr(mod, "bias"):
                     param = np.concatenate([param, mod.bias.data.cpu().numpy().flatten()], axis=0)
                 mod_ = self.mod_model.get_submodule(name)
-                param_ = mod_.weight.data.cpu().numpy().flatten()
-                if hasattr(mod_, "bias"):
-                    param_ = np.concatenate([param_, mod_.bias.data.cpu().numpy().flatten()], axis=0)
+                param_ = mod_.weight().dequantize().data.cpu().numpy().flatten()
+                if hasattr(mod, "bias"):
+                    param_ = np.concatenate([param_, mod_.bias().dequantize().data.cpu().numpy().flatten()], axis=0)
                 diff[name] = param - param_
             return self.mod_model, diff
         else:
@@ -77,7 +70,7 @@ class QuantizeOp(BaseOp):
 
     def reset(self):
         self.qconfig_dict = {
-            "module_name": OrderedDict()
+
         }
 
     def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):

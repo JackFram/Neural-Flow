@@ -258,6 +258,80 @@ def train_bert(args, model, tokenizer, logger, prefix=""):
     return results
 
 
+def get_bert_FIM(args, model, tokenizer, layer_name, logger, prefix=""):
+    # Loop to handle MNLI double evaluation (matched, mis-matched)
+
+    accelerator = Accelerator()
+    logger.info(accelerator.state)
+
+    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    if accelerator.is_local_main_process:
+        transformers.utils.logging.set_verbosity_info()
+    else:
+        transformers.utils.logging.set_verbosity_error()
+
+    train_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
+    train_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
+
+    results = {}
+    for train_task, train_output_dir in zip(train_task_names, train_outputs_dirs):
+        train_dataset = load_and_cache_examples(args, train_task, tokenizer, logger, evaluate=False)
+
+        args.train_batch_size = args.per_device_train_batch_size * max(1, args.n_gpu)
+        # Note that DistributedSampler samples randomly
+        train_sampler = SequentialSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+
+        # multi-gpu eval
+        if args.n_gpu > 1:
+            model = torch.nn.DataParallel(model)
+
+        model, train_dataloader = accelerator.prepare(
+            model, train_dataloader
+        )
+
+        logger.info("***** Getting Empirical Fisher Information Matrix *****")
+        logger.info(f"  Num examples = {args.train_batch_size}")
+        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
+        logger.info(f"  Layer = {layer_name}")
+
+        progress_bar = tqdm(range(args.train_batch_size), disable=not accelerator.is_local_main_process)
+        completed_steps = 0
+        model.train()
+
+        for step, batch in enumerate(train_dataloader):
+            FIM = None
+            for i in range(args.train_batch_size):
+                inputs = {
+                    'input_ids':      batch[0][[i]],
+                    'attention_mask': batch[1][[i]],
+                    'labels':         batch[3][[i]]
+                }
+                if args.model_type != 'distilbert':
+                    inputs['token_type_ids'] = batch[2][[i]] if args.model_type in ['bert', 'xlnet'] else None  # XLM, DistilBERT and RoBERTa don't use segment_ids
+                model.zero_grad()
+                outputs = model(**inputs)
+                loss = outputs.loss
+                loss = loss / args.gradient_accumulation_steps
+                accelerator.backward(loss)
+                progress_bar.update(1)
+                completed_steps += 1
+                weight = model.get_submodule(layer_name).weight.data.cpu().numpy().flatten()
+                if hasattr(model.get_submodule(layer_name), "bias"):
+                    bias = model.get_submodule(layer_name).bias.data.cpu().numpy().flatten()
+                    param = np.concatenate([weight, bias], axis=0)
+                else:
+                    param = weight
+                if FIM is None:
+                    FIM = param**2
+                else:
+                    FIM += param**2
+
+            return FIM/args.train_batch_size
+
+    return results
+
+
 def time_model_evaluation(model, configs, tokenizer, logger):
     eval_start_time = time.time()
     result = evaluate(configs, model, tokenizer, logger, prefix="")

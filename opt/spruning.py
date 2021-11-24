@@ -11,7 +11,7 @@ from misc.train import train_model
 class SPruningOp(BaseOp):
     def __init__(self, model: nn.Module, amount=0.8, method="l1"):
         super().__init__(model)
-        self.op_name = "structured pruning"
+        self.op_name = "structured_pruning"
         self.amount = amount
         self.method = method
         self.config = None
