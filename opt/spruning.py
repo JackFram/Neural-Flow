@@ -2,6 +2,7 @@ from .base import BaseOp
 from netflow import *
 
 import copy
+import numpy as np
 import torch.nn as nn
 import torch.nn.utils.prune as prune
 import torch.optim as optim
@@ -16,8 +17,9 @@ class SPruningOp(BaseOp):
         self.method = method
         self.config = None
 
-    def apply(self, name_list, verbose=False, *args, **kwargs):
+    def apply(self, name_list, verbose=False, with_diff=False, *args, **kwargs):
         name_set = set()
+        diff = {}
         for name in name_list:
             if name not in self.operatable:
                 print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
@@ -27,14 +29,31 @@ class SPruningOp(BaseOp):
         model_to_prune = copy.deepcopy(self.model)
         for mod_name, mod in model_to_prune.named_modules():
             if mod_name in name_set:
+                if with_diff:
+                    weight = mod.weight.data.cpu().numpy().flatten()
+                    if hasattr(mod, "bias"):
+                        bias = mod.bias.data.cpu().numpy().flatten()
+                        param = np.concatenate([weight, bias], axis=0)
+                    else:
+                        param = weight
                 if verbose:
                     print(f"Module weights before pruning: {list(mod.named_parameters())}")
-                mod = self._prune(mod)
+                self._prune(mod)
+                if with_diff:
+                    weight = mod.weight.data.cpu().numpy().flatten()
+                    if hasattr(mod, "bias"):
+                        bias = mod.bias.data.cpu().numpy().flatten()
+                        param_ = np.concatenate([weight, bias], axis=0)
+                    else:
+                        param_ = weight
+                    diff[mod_name] = param - param_
                 if verbose:
                     print(f"Module weights after pruning: {list(mod.named_parameters())}")
         self.mod_model = model_to_prune
-
-        return self.mod_model
+        if with_diff:
+            return self.mod_model, diff
+        else:
+            return self.mod_model
 
     def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):
         mod_model = self.apply(name_list, verbose)

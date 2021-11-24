@@ -84,33 +84,27 @@ tokenizer = BertTokenizer.from_pretrained(
 model = BertForSequenceClassification.from_pretrained(configs.output_dir)
 
 # Quantization
-from opt import BertQuantizeOp
-op = BertQuantizeOp(model)
-op.set_config()
-mod_model, diff = op.apply(name_list=op.operatable[:1], verbose=False, with_diff=True)
-param = diff[op.operatable[0]]
-FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
-print(param[:20], FIM[:20])
-
-# qconfig = get_default_qconfig("fbgemm")
-#
-# mod_model = torch.quantization.quantize_dynamic(
-#     model, {nn.Linear}, dtype=torch.qint8  # qint8, float16, quint8
-# )
-#
-# for name, module in mod_model.named_modules():
-#     if isinstance(module, nn.quantized.dynamic.modules.linear.Linear):
-#         print(name, module.bias().dequantize().data.cpu().numpy().flatten().shape)
-
-# for name, module in model.named_modules():
-#     if isinstance(module, nn.Linear):
-#         print(name)
+# from opt import BertQuantizeOp
+# op = BertQuantizeOp(model)
+# op.set_config()
+# mod_model, diff = op.apply(name_list=op.operatable[:1], verbose=False, with_diff=True)
+# param = diff[op.operatable[0]]
+# FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
+# print(param[:20], FIM[:20])
 
 
 # ####### Pruning ##########
 
-# from opt import PruningOp, SPruningOp
-#
+from opt import PruningOp, SPruningOp
+
+op = SPruningOp(model, amount=0.5)
+mod_model, diff = op.apply(name_list=op.operatable[:1], verbose=False, with_diff=True)
+FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
+param = diff[op.operatable[0]]
+
+# ##########################
+
+
 # print("num labels: {}".format(num_labels))
 #
 # acc = []
@@ -118,14 +112,12 @@ print(param[:20], FIM[:20])
 # acc_f1 = []
 # dev = []
 #
-# for rate in np.arange(1, 1.05, 0.05):
+# for rate in np.arange(0.90, 1.05, 0.05):
 #     print("rate:%f "%rate)
-#     op = PruningOp(model, amount=rate)
+#     op = SPruningOp(model, amount=rate)
 #     mod_model, diff = op.apply(name_list=op.operatable[:1], verbose=False, with_diff=True)
 #     FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
 #     param = diff[op.operatable[0]]
-#     print(param.shape, FIM.shape)
-#     exit(0)
 #     train_bert(configs, mod_model, tokenizer, logger)
 #     results = time_model_evaluation(mod_model, configs, tokenizer, logger)
 #     acc.append(results["acc"])

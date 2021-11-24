@@ -7,7 +7,6 @@ from .base import BaseOp
 from collections import OrderedDict
 from misc.train import train_model
 
-from torch.quantization.quantize_fx import prepare_fx, convert_fx
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
 
 
@@ -74,35 +73,7 @@ class BertQuantizeOp(BaseOp):
         }
 
     def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):
-        for name in name_list:
-
-            if name not in self.operatable:
-                print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
-                raise AttributeError
-
-            self.qconfig_dict["module_name"][name] = self.qconfig
-        model_to_quantize = copy.deepcopy(self.model)
-        if verbose:
-            print("model to qunatize:", model_to_quantize)
-        prepared_model = prepare_fx(model_to_quantize, self.qconfig_dict)
-
-        print("Finetuning...")
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        prepared_model.to(device)
-        criterion = nn.CrossEntropyLoss()
-        optimizer_ft = optim.SGD(prepared_model.parameters(), lr=1e-3, momentum=0.9, weight_decay=0.1)
-        exp_lr_scheduler = optim.lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.3)
-        prepared_model = train_model(prepared_model, criterion, optimizer_ft, exp_lr_scheduler,
-                                     num_epochs=10, device=device)
-
-        if verbose:
-            print("prepared model:", prepared_model)
-        self.mod_model = convert_fx(prepared_model)
-        if verbose:
-            print("quantized model", self.mod_model)
-        self.print_size()
-
-        return self.mod_model
+        raise NotImplementedError
 
     def set_config(self, config=get_default_qconfig("fbgemm")):
         '''
