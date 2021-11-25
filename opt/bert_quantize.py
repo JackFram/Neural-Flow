@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from .base import BaseOp
+from .utils import get_size
 from collections import OrderedDict
 from misc.train import train_model
 
@@ -20,7 +21,7 @@ class BertQuantizeOp(BaseOp):
 
         }
 
-    def apply(self, name_list: list=None, verbose=False, with_diff=False, *args, **kwargs):
+    def apply(self, name_list: list=None, verbose=False, with_profile=False, *args, **kwargs):
 
         '''
 
@@ -32,6 +33,7 @@ class BertQuantizeOp(BaseOp):
         :return:
         '''
         diff = {}
+        storage_save = {}
         if name_list is None:
             name_list = self.operatable
             self.qconfig_dict = {nn.Linear: self.qconfig}
@@ -52,7 +54,7 @@ class BertQuantizeOp(BaseOp):
             print("quantized model", self.mod_model)
         self.print_size()
 
-        if with_diff:
+        if with_profile:
             for name in name_list:
                 mod = self.model.get_submodule(name)
                 param = mod.weight.data.cpu().numpy().flatten()
@@ -63,7 +65,8 @@ class BertQuantizeOp(BaseOp):
                 if hasattr(mod, "bias"):
                     param_ = np.concatenate([param_, mod_.bias().dequantize().data.cpu().numpy().flatten()], axis=0)
                 diff[name] = param - param_
-            return self.mod_model, diff
+                storage_save[name] = param.size * (get_size(mod.weight.dtype)-get_size(mod_.weight().dtype))
+            return self.mod_model, diff, storage_save
         else:
             return self.mod_model
 

@@ -1,5 +1,6 @@
 
 from .base import BaseOp
+from .utils import get_size
 from netflow import *
 
 import copy
@@ -18,9 +19,10 @@ class PruningOp(BaseOp):
         self.method = method
         self.config = None
 
-    def apply(self, name_list, verbose=False, with_diff=False, *args, **kwargs):
+    def apply(self, name_list, verbose=False, with_profile=False, *args, **kwargs):
         name_set = set()
         diff = {}
+        storage_save = {}
         for name in name_list:
             if name not in self.operatable:
                 print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
@@ -30,17 +32,18 @@ class PruningOp(BaseOp):
         model_to_prune = copy.deepcopy(self.model)
         for mod_name, mod in model_to_prune.named_modules():
             if mod_name in name_set:
-                if with_diff:
+                if with_profile:
                     weight = mod.weight.data.cpu().numpy().flatten()
                     if hasattr(mod, "bias"):
                         bias = mod.bias.data.cpu().numpy().flatten()
                         param = np.concatenate([weight, bias], axis=0)
                     else:
                         param = weight
+
                 if verbose:
                     print(f"Module weights before pruning: {list(mod.named_parameters())}")
                 self._prune(mod)
-                if with_diff:
+                if with_profile:
                     weight = mod.weight.data.cpu().numpy().flatten()
                     if hasattr(mod, "bias"):
                         bias = mod.bias.data.cpu().numpy().flatten()
@@ -48,11 +51,12 @@ class PruningOp(BaseOp):
                     else:
                         param_ = weight
                     diff[mod_name] = param - param_
+                    storage_save[mod_name] = param.size * get_size(mod.weight.dtype) * self.amount
                 if verbose:
                     print(f"Module weights after pruning: {list(mod.named_parameters())}")
         self.mod_model = model_to_prune
-        if with_diff:
-            return self.mod_model, diff
+        if with_profile:
+            return self.mod_model, diff, storage_save
         else:
             return self.mod_model
 

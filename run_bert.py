@@ -84,23 +84,23 @@ tokenizer = BertTokenizer.from_pretrained(
 model = BertForSequenceClassification.from_pretrained(configs.output_dir)
 
 # Quantization
-# from opt import BertQuantizeOp
-# op = BertQuantizeOp(model)
-# op.set_config()
-# mod_model, diff = op.apply(name_list=op.operatable[:1], verbose=False, with_diff=True)
+from opt import BertQuantizeOp
+op = BertQuantizeOp(model)
+op.set_config()
+mod_model, diff, storage_save = op.apply(name_list=op.operatable, verbose=False, with_profile=True)
 # param = diff[op.operatable[0]]
 # FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
-# print(param[:20], FIM[:20])
+print(np.array(list(storage_save.values())).sum())
 
 
 # ####### Pruning ##########
 
-from opt import PruningOp, SPruningOp
-
-op = SPruningOp(model, amount=0.5)
-mod_model, diff = op.apply(name_list=op.operatable[:1], verbose=False, with_diff=True)
-FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
-param = diff[op.operatable[0]]
+# from opt import PruningOp, SPruningOp
+#
+# op = PruningOp(model, amount=0.5)
+# mod_model, diff, storage_save = op.apply(name_list=op.operatable, verbose=False, with_profile=True)
+# FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
+# param = diff[op.operatable[0]]
 
 # ##########################
 
