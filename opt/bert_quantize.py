@@ -20,6 +20,7 @@ class BertQuantizeOp(BaseOp):
         self.qconfig_dict = {
 
         }
+        self.qconfig_set = set()
 
     def apply(self, name_list: list=None, verbose=False, with_profile=False, *args, **kwargs):
 
@@ -44,10 +45,18 @@ class BertQuantizeOp(BaseOp):
                     print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
                     raise AttributeError
 
-                self.qconfig_dict[name] = self.qconfig
-        self.mod_model = torch.quantization.quantize_dynamic(
-            self.model, self.qconfig_dict # qint8, float16, quint8
-        )
+                if isinstance(self.qconfig, torch.dtype):
+                    self.qconfig_set.add(self.qconfig)
+                else:
+                    self.qconfig_dict[name] = self.qconfig
+        if isinstance(self.qconfig, torch.dtype):
+            self.mod_model = torch.quantization.quantize_dynamic(
+                self.model, self.qconfig_set, self.qconfig  # qint8, float16, quint8
+            )
+        else:
+            self.mod_model = torch.quantization.quantize_dynamic(
+                self.model, self.qconfig_dict  # qint8, float16, quint8
+            )
         if verbose:
             print("model to qunatize:", self.model)
         if verbose:
@@ -84,6 +93,7 @@ class BertQuantizeOp(BaseOp):
         :param config: quantization configuration
         :return: no return, update the qconfig_dict
         '''
+        self.mode = "fbgemm"
         self.qconfig = config
 
     @property

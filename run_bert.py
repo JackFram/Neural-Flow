@@ -83,14 +83,28 @@ tokenizer = BertTokenizer.from_pretrained(
 
 model = BertForSequenceClassification.from_pretrained(configs.output_dir)
 
-# Quantization
-from opt import BertQuantizeOp
-op = BertQuantizeOp(model)
-op.set_config()
-mod_model, diff, storage_save = op.apply(name_list=op.operatable, verbose=False, with_profile=True)
-# param = diff[op.operatable[0]]
-# FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
-print(np.array(list(storage_save.values())).sum())
+
+# ####### Solver ##########
+from solver import OneShotHessianSolver
+from opt import BertQuantizeOp, SPruningOp, PruningOp
+
+Ops = [BertQuantizeOp, SPruningOp, PruningOp]
+op = PruningOp(model, amount=0.0)
+
+solver = OneShotHessianSolver(model.eval(), Ops, configs, tokenizer, logger)
+profile = solver.get_profile(op.operatable[0])
+print(profile)
+
+
+# ####### Quantization ##########
+# from opt import BertQuantizeOp
+# op = BertQuantizeOp(model)
+# op.set_config()
+# mod_model, diff, storage_save = op.apply(name_list=op.operatable, verbose=False, with_profile=True)
+# # param = diff[op.operatable[0]]
+# # FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
+# print(np.array(list(storage_save.values())).sum())
+# ###############################
 
 
 # ####### Pruning ##########

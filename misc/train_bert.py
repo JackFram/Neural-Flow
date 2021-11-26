@@ -326,7 +326,7 @@ def get_bert_FIM(args, model, tokenizer, layer_name, logger, prefix=""):
                     FIM = param**2
                 else:
                     FIM += param**2
-
+            model.to("cpu")
             return FIM/args.train_batch_size
 
     return results

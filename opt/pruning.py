@@ -14,12 +14,14 @@ from misc.train import train_model
 class PruningOp(BaseOp):
     def __init__(self, model: nn.Module, amount=0.8, method="l1"):
         super().__init__(model)
-        self.op_name = "unstructured_pruning"
+        self.op_name = "upruning"
         self.amount = amount
         self.method = method
         self.config = None
 
-    def apply(self, name_list, verbose=False, with_profile=False, *args, **kwargs):
+    def apply(self, name_list, verbose=False, amount=None, with_profile=False, *args, **kwargs):
+        if amount is not None:
+            self.amount = amount
         name_set = set()
         diff = {}
         storage_save = {}
