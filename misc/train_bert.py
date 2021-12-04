@@ -55,9 +55,11 @@ def evaluate(args, model, tokenizer, logger, prefix=""):
         if args.n_gpu > 1:
             model = torch.nn.DataParallel(model)
 
-        model, eval_dataloader = accelerator.prepare(
-            model, eval_dataloader
-        )
+        if args.device is "gpu":
+
+            model, eval_dataloader = accelerator.prepare(
+                model, eval_dataloader
+            )
 
         # Eval!
         logger.info("***** Running evaluation {} *****".format(prefix))
@@ -202,9 +204,11 @@ def train_bert(args, model, tokenizer, logger, prefix=""):
         ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
-        model, optimizer, train_dataloader = accelerator.prepare(
-            model, optimizer, train_dataloader
-        )
+        if args.device is "gpu":
+
+            model, optimizer, train_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader
+            )
 
         num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
         if args.max_train_steps is None:

@@ -51,7 +51,7 @@ class SPruningOp(BaseOp):
                     else:
                         param_ = weight
                     diff[mod_name] = param - param_
-                    storage_save[mod_name] = param.size * get_size(mod.weight.dtype) * self.amount
+                    storage_save[mod_name] = param.size * (1-self.amount)
                 if verbose:
                     print(f"Module weights after pruning: {list(mod.named_parameters())}")
         self.mod_model = model_to_prune

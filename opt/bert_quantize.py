@@ -74,7 +74,7 @@ class BertQuantizeOp(BaseOp):
                 if hasattr(mod, "bias"):
                     param_ = np.concatenate([param_, mod_.bias().dequantize().data.cpu().numpy().flatten()], axis=0)
                 diff[name] = param - param_
-                storage_save[name] = param.size * (get_size(mod.weight.dtype)-get_size(mod_.weight().dtype))
+                storage_save[name] = get_size(mod.weight.dtype)
             return self.mod_model, diff, storage_save
         else:
             return self.mod_model

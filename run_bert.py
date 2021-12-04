@@ -55,7 +55,7 @@ configs.model_type = "bert".lower()
 configs.do_lower_case = True
 
 # Set the device, batch size, topology, and caching flags.
-configs.device = "cpu"
+configs.device = "gpu"
 configs.per_device_eval_batch_size = 8
 configs.per_device_train_batch_size = 8
 configs.n_gpu = 0
@@ -85,25 +85,23 @@ model = BertForSequenceClassification.from_pretrained(configs.output_dir)
 
 
 # ####### Solver ##########
-from solver import OneShotHessianSolver
+from solver import OneShotHessianSolver, BaselineSolver
 from opt import BertQuantizeOp, SPruningOp, PruningOp
 
-Ops = [BertQuantizeOp, SPruningOp, PruningOp]
-op = PruningOp(model, amount=0.0)
+#Ops = [BertQuantizeOp, PruningOp]
+Ops = [PruningOp]
 
-solver = OneShotHessianSolver(model.eval(), Ops, configs, tokenizer, logger)
-profile = solver.get_profile(op.operatable[0])
-print(profile)
+#solver = OneShotHessianSolver(model.eval(), Ops, configs, tokenizer, logger)
+solver = BaselineSolver(model.eval(), Ops, configs, tokenizer, logger)
+solver.get_solution(100)
+# #########################
 
 
 # ####### Quantization ##########
 # from opt import BertQuantizeOp
 # op = BertQuantizeOp(model)
 # op.set_config()
-# mod_model, diff, storage_save = op.apply(name_list=op.operatable, verbose=False, with_profile=True)
-# # param = diff[op.operatable[0]]
-# # FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
-# print(np.array(list(storage_save.values())).sum())
+# mod_model, diff, storage_save = op.apply(name_list=op.operatable[:3], verbose=False, with_profile=True)
 # ###############################
 
 
@@ -111,10 +109,8 @@ print(profile)
 
 # from opt import PruningOp, SPruningOp
 #
-# op = PruningOp(model, amount=0.5)
-# mod_model, diff, storage_save = op.apply(name_list=op.operatable, verbose=False, with_profile=True)
-# FIM = get_bert_FIM(configs, model, tokenizer, op.operatable[0], logger)
-# param = diff[op.operatable[0]]
+# op = PruningOp(model, amount=0.4)
+# mod_model, diff, storage_save = op.apply(name_list=op.operatable[:3], verbose=False, with_profile=True)
 
 # ##########################
 
@@ -183,4 +179,3 @@ print(profile)
 #
 # train_bert(configs, mod_model, tokenizer, logger)
 # time_model_evaluation(mod_model, configs, tokenizer, logger)
-# ####### End of Pruning ##########
