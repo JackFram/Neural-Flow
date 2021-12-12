@@ -3,32 +3,21 @@ from __future__ import absolute_import, division, print_function
 
 import numpy as np
 import os
-import time
 import torch
 import math
 
+from sklearn.metrics import f1_score, accuracy_score
 from torch.utils.data import (DataLoader, SequentialSampler, DistributedSampler,
                               TensorDataset)
 from tqdm import tqdm
 import logging
 from accelerate import Accelerator
 from transformers import glue_compute_metrics as compute_metrics
-from transformers import glue_output_modes as output_modes
-from transformers import glue_processors as processors
-from transformers import glue_convert_examples_to_features as convert_examples_to_features
 import transformers
 
 from transformers import (
     AdamW,
-    AutoConfig,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    DataCollatorWithPadding,
-    PretrainedConfig,
-    SchedulerType,
-    default_data_collator,
     get_scheduler,
-    set_seed,
 )
 from datasets import load_dataset
 
@@ -42,7 +31,7 @@ def evaluate(args, model, tokenizer, logger, prefix=""):
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, logger, evaluate=True)
+        eval_dataset = load_emotion_dataset(tokenizer, evaluate=True)
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -56,7 +45,7 @@ def evaluate(args, model, tokenizer, logger, prefix=""):
         if args.n_gpu > 1:
             model = torch.nn.DataParallel(model)
 
-        if args.device is "gpu":
+        if args.device == "gpu":
 
             model, eval_dataloader = accelerator.prepare(
                 model, eval_dataloader
@@ -93,12 +82,16 @@ def evaluate(args, model, tokenizer, logger, prefix=""):
                 out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
 
         eval_loss = eval_loss / nb_eval_steps
-        if args.output_mode == "classification":
-            preds = np.argmax(preds, axis=1)
-        elif args.output_mode == "regression":
-            preds = np.squeeze(preds)
-        result = compute_metrics(eval_task, preds, out_label_ids)
-        results.update(result)
+        preds_flat = np.argmax(preds, axis=1).flatten()
+        labels_flat = out_label_ids.flatten()
+        f1 = f1_score(labels_flat, preds_flat, average="weighted")
+        acc = accuracy_score(labels_flat, preds_flat)
+        acc_f1 = (f1 + acc)/2
+        result = {
+            "f1": f1,
+            "acc": acc,
+            "acc_and_f1": acc_f1
+        }
 
         output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
@@ -109,8 +102,27 @@ def evaluate(args, model, tokenizer, logger, prefix=""):
 
     return results
 
-def load_emotion_dataset():
-    pass
+def load_emotion_dataset(tokenizer, evaluate):
+    data = load_dataset("emotion")
+    if evaluate:
+        data = data["validation"].to_pandas()
+    else:
+        data = data["train"].to_pandas()
+
+    encoded_data = tokenizer.batch_encode_plus(
+        data.text.values,
+        add_special_tokens=True,
+        return_attention_mask=True,
+        padding="max_length",
+        return_tensors='pt'
+    )
+    all_input_ids = encoded_data["input_ids"]
+    all_attention_mask = encoded_data["attention_mask"]
+    all_token_type_ids = encoded_data["token_type_ids"]
+    all_labels = torch.tensor(data.label.values, dtype=torch.long)
+
+    dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
+    return dataset
 
 def train_bert(args, model, tokenizer, logger, prefix=""):
     accelerator = Accelerator()
@@ -122,7 +134,7 @@ def train_bert(args, model, tokenizer, logger, prefix=""):
     else:
         transformers.utils.logging.set_verbosity_error()
 
-    train_dataset = load_emotion_dataset()
+    train_dataset = load_emotion_dataset(tokenizer, evaluate=False)
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -149,7 +161,7 @@ def train_bert(args, model, tokenizer, logger, prefix=""):
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
-    if args.device is "gpu":
+    if args.device == "gpu":
 
         model, optimizer, train_dataloader = accelerator.prepare(
             model, optimizer, train_dataloader
