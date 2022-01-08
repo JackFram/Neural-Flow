@@ -5,14 +5,10 @@ import numpy as np
 import torch
 from torch import nn
 import copy
-
-
 class SVDDecomposedLayer():
-    def __init__(self, layer, layer_name,
+    def __init__(self, layer,
                  rank = None,
                  pretrained = None):
-
-        self.layer_name = layer_name
         self.layer = layer
         self.pretrained = pretrained
         
@@ -29,21 +25,26 @@ class SVDDecomposedLayer():
         
         self.weight, self.bias = self.get_weights_to_decompose()
         self.rank = rank
-            
         ##### create decomposed layers
-        self.new_layers = nn.Sequential()
+        # self.new_layers = nn.Sequential()
         
-        for j, l in enumerate(self.create_new_layers()):
-            self.new_layers.add_module('{}-{}'.format(self.layer_name, j), l)
+        # for j, l in enumerate(self.create_new_layers()):
+        #     self.new_layers.add_module('{}-{}'.format(self.layer_name, j), l)
         
-        weights, biases = self.get_svd_factors()        
-        
-        for j, (w, b)  in enumerate(zip(weights, biases)):
-            self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).weight.data = w
-            if b is not None:
-                self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias.data = b
-            else:
-                self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias = None 
+        self.new_layers = nn.Linear(in_features = self.in_features, out_features = self.out_features)
+
+        [w0, w1], [_, b] = self.get_svd_factors()        
+
+        self.new_layers.weight.data = torch.matmul(w1, w0)
+
+        self.new_layers.bias.data = b
+
+        # for j, (w, b)  in enumerate(zip(weights, biases)):
+        #     self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).weight.data = w
+        #     if b is not None:
+        #         self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias.data = b
+        #     else:
+        #         self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias = None 
                 
         self.layer = None
         self.weight = None
@@ -207,42 +208,6 @@ class SVDDecomposedConvLayer():
 
         return [w0, w1], [None, bias]
 
-
-def get_compressed_model(model,
-                         layer_names,
-                         rank):
-    '''
-    layer_names:list,
-    ranks: defaultdict,
-    decompositions: defaultdict,
-    layer_types: defaultdict,
-    vbmf_weaken_factors: defaultdict
-    '''
-    compressed_model = copy.deepcopy(model)
-    model = None
-
-    for mod_name, mod in compressed_model.named_modules():
-
-        if mod_name in layer_names:
-
-            ## model before 
-            #print('subm_name: {} \n'.format(subm_names))
-            layer = compressed_model.__getattr__(mod_name)
-
-            if isinstance(mod, nn.Conv2d):
-                decomposed_layer = SVDDecomposedConvLayer(layer,\
-                                                            layer,\
-                                                            rank)
-            elif isinstance(mod, nn.Linear):
-                decomposed_layer = SVDDecomposedLayer(layer,\
-                                                        layer,\
-                                                        rank)
-
-            
-            compressed_model.__setattr__(layer, decomposed_layer.new_layers)
-
-    return compressed_model
-
 class LowRankOp(BaseOp):
     def __init__(self, model: nn.Module, rank=10):
         super().__init__(model)
@@ -250,17 +215,52 @@ class LowRankOp(BaseOp):
         self.rank = rank
         self.mod_model = None
 
-    def apply(self, name_list, verbose=False, *args, **kwargs):
-        name_set = set()
-        for name in name_list:
+    def apply(self, name_list, rank=None, verbose=False, with_profile=False, *args, **kwargs):
+        if rank is None:
+           rank = self.rank 
+        diff = {}
+        storage_save = {}
+        model_to_lowrank = copy.deepcopy(self.model)
+        for name in set(name_list):
             if name not in self.operatable:
                 print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
                 raise AttributeError
-            name_set.add(name)
+            
+            prevmod_name = ".".join(name.split(".")[:-1])
+            mod_name = name.split(".")[-1]
+            prevmod = model_to_lowrank.get_submodule(prevmod_name)
+            mod = model_to_lowrank.get_submodule(name)
 
-        self.mod_model = get_compressed_model(self.model, name_set, self.rank)
+            if with_profile:
+                param = self.get_param(mod)
 
-        return self.mod_model
+            self.low_rank_(prevmod, mod_name, mod, rank)
+
+            if with_profile:
+                param_ = self.get_param(model_to_lowrank.get_submodule(name))
+                diff[name] = param - param_
+                dim_in, dim_out = mod.weight.data.cpu().numpy().shape
+                storage_save[name] = (dim_in + dim_out) * rank
+
+        self.mod_model = model_to_lowrank
+        if with_profile:
+            return self.mod_model, diff, storage_save
+        else:
+            return self.mod_model
+
+    def low_rank_(self, prev_layer, layer_name, layer, rank):
+        if isinstance(layer, nn.Conv2d):
+            decomposed_layer = SVDDecomposedConvLayer(layer, layer_name, rank)
+        elif isinstance(layer, nn.Linear):
+            decomposed_layer = SVDDecomposedLayer(layer, rank)
+        prev_layer.__setattr__(layer_name, decomposed_layer.new_layers)
+
+    def get_param(self, mod:nn.modules):
+        weight = mod.weight.data.cpu().numpy().flatten()
+        if hasattr(mod, "bias"):
+            bias = mod.bias.data.cpu().numpy().flatten()
+            return np.concatenate([weight, bias], axis=0)
+        return weight
 
     @property
     def operatable(self):

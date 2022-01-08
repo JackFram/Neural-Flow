@@ -6,7 +6,7 @@ import torch.optim as optim
 from .base import BaseOp
 from .utils import get_size
 from collections import OrderedDict
-from misc.train import train_model
+# from misc.train import train_model
 
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
 
@@ -35,6 +35,23 @@ class BertQuantizeOp(BaseOp):
         '''
         diff = {}
         storage_save = {}
+        if self.qconfig is None:
+            self.mod_model = copy.deepcopy(self.model)
+            if with_profile:
+                for name in name_list:
+                    mod = self.model.get_submodule(name)
+                    param = mod.weight.data.cpu().numpy().flatten()
+                    if hasattr(mod, "bias") and mod.bias is not None:
+                        param = np.concatenate([param, mod.bias.data.cpu().numpy().flatten()], axis=0)
+                    mod_ = self.mod_model.get_submodule(name)
+                    param_ = mod_.weight.data.cpu().numpy().flatten()
+                    if hasattr(mod, "bias") and mod.bias is not None:
+                        param_ = np.concatenate([param_, mod_.bias.data.cpu().numpy().flatten()], axis=0)
+                    diff[name] = param - param_
+                    storage_save[name] = get_size(mod_.weight.dtype)
+                return self.mod_model, diff, storage_save
+            else:
+                return self.mod_model
         if name_list is None:
             name_list = self.operatable
             self.qconfig_dict = {nn.Linear: self.qconfig}
@@ -61,20 +78,21 @@ class BertQuantizeOp(BaseOp):
             print("model to qunatize:", self.model)
         if verbose:
             print("quantized model", self.mod_model)
-        self.print_size()
+
+        # self.print_size()
 
         if with_profile:
             for name in name_list:
                 mod = self.model.get_submodule(name)
                 param = mod.weight.data.cpu().numpy().flatten()
-                if hasattr(mod, "bias"):
+                if hasattr(mod, "bias") and mod.bias is not None:
                     param = np.concatenate([param, mod.bias.data.cpu().numpy().flatten()], axis=0)
                 mod_ = self.mod_model.get_submodule(name)
                 param_ = mod_.weight().dequantize().data.cpu().numpy().flatten()
-                if hasattr(mod, "bias"):
+                if hasattr(mod, "bias") and mod.bias is not None:
                     param_ = np.concatenate([param_, mod_.bias().dequantize().data.cpu().numpy().flatten()], axis=0)
                 diff[name] = param - param_
-                storage_save[name] = get_size(mod.weight.dtype)
+                storage_save[name] = get_size(mod_.weight().dtype)
             return self.mod_model, diff, storage_save
         else:
             return self.mod_model
@@ -87,14 +105,18 @@ class BertQuantizeOp(BaseOp):
     def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):
         raise NotImplementedError
 
-    def set_config(self, config=get_default_qconfig("fbgemm")):
+    def set_config(self, config="fbgemm"):
         '''
 
         :param config: quantization configuration
         :return: no return, update the qconfig_dict
         '''
-        self.mode = "fbgemm"
-        self.qconfig = config
+        if config == "fbgemm":
+            self.mode = "fbgemm"
+            self.qconfig = get_default_qconfig("fbgemm")
+        else:
+            self.mode = "none"
+            self.qconfig = None
 
     @property
     def operatable(self):

@@ -7,7 +7,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.utils.prune as prune
 import torch.optim as optim
-from misc.train import train_model
+# from misc.train import train_model
 
 
 class SPruningOp(BaseOp):
@@ -35,7 +35,7 @@ class SPruningOp(BaseOp):
             if mod_name in name_set:
                 if with_profile:
                     weight = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias"):
+                    if hasattr(mod, "bias") and mod.bias is not None:
                         bias = mod.bias.data.cpu().numpy().flatten()
                         param = np.concatenate([weight, bias], axis=0)
                     else:
@@ -45,7 +45,7 @@ class SPruningOp(BaseOp):
                 self._prune(mod)
                 if with_profile:
                     weight = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias"):
+                    if hasattr(mod, "bias") and mod.bias is not None:
                         bias = mod.bias.data.cpu().numpy().flatten()
                         param_ = np.concatenate([weight, bias], axis=0)
                     else:

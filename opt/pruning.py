@@ -8,7 +8,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.utils.prune as prune
 import torch.optim as optim
-from misc.train import train_model
+# from misc.train import train_model
 
 
 class PruningOp(BaseOp):
@@ -30,13 +30,13 @@ class PruningOp(BaseOp):
                 print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
                 raise AttributeError
             name_set.add(name)
-            
+
         model_to_prune = copy.deepcopy(self.model)
         for mod_name, mod in model_to_prune.named_modules():
             if mod_name in name_set:
                 if with_profile:
                     weight = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias"):
+                    if hasattr(mod, "bias") and mod.bias is not None:
                         bias = mod.bias.data.cpu().numpy().flatten()
                         param = np.concatenate([weight, bias], axis=0)
                     else:
@@ -47,7 +47,7 @@ class PruningOp(BaseOp):
                 self._prune(mod)
                 if with_profile:
                     weight = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias"):
+                    if hasattr(mod, "bias") and mod.bias is not None:
                         bias = mod.bias.data.cpu().numpy().flatten()
                         param_ = np.concatenate([weight, bias], axis=0)
                     else:
@@ -56,6 +56,48 @@ class PruningOp(BaseOp):
                     storage_save[mod_name] = int(param.size * (1-self.amount))
                 if verbose:
                     print(f"Module weights after pruning: {list(mod.named_parameters())}")
+        self.mod_model = model_to_prune
+        if with_profile:
+            return self.mod_model, diff, storage_save
+        else:
+            return self.mod_model
+
+    def apply_(self, name_list, verbose=False, amount=None, with_profile=False, *args, **kwargs):
+        if amount is not None:
+            self.amount = amount
+        name_set = set()
+        diff = {}
+        storage_save = {}
+        model_to_prune = copy.deepcopy(self.model)
+        for name in name_list:
+            if name not in self.operatable:
+                print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
+                raise AttributeError
+            name_set.add(name)
+            mod = model_to_prune.get_submodule(name)
+            if with_profile:
+                weight = mod.weight.data.cpu().numpy().flatten()
+                if hasattr(mod, "bias"):
+                    bias = mod.bias.data.cpu().numpy().flatten()
+                    param = np.concatenate([weight, bias], axis=0)
+                else:
+                    param = weight
+
+            if verbose:
+                print(f"Module weights before pruning: {list(mod.named_parameters())}")
+            self._prune(mod)
+            if with_profile:
+                weight = mod.weight.data.cpu().numpy().flatten()
+                if hasattr(mod, "bias"):
+                    bias = mod.bias.data.cpu().numpy().flatten()
+                    param_ = np.concatenate([weight, bias], axis=0)
+                else:
+                    param_ = weight
+                diff[name] = param - param_
+                storage_save[name] = int(param.size * (1 - self.amount))
+            if verbose:
+                print(f"Module weights after pruning: {list(mod.named_parameters())}")
+
         self.mod_model = model_to_prune
         if with_profile:
             return self.mod_model, diff, storage_save

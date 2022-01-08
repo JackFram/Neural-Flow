@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from .base import BaseOp
 from collections import OrderedDict
-from misc.train import train_model
+# from misc.train import train_model
 
 from torch.quantization.quantize_fx import prepare_fx, convert_fx
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig

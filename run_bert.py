@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import random
 import torch
+import copy
 import torch.nn as nn
 
 from argparse import Namespace
@@ -81,27 +82,67 @@ set_seed(42)
 tokenizer = BertTokenizer.from_pretrained(
     configs.output_dir, do_lower_case=configs.do_lower_case)
 
-model = BertForSequenceClassification.from_pretrained(configs.output_dir)
+model_orig = BertForSequenceClassification.from_pretrained(configs.output_dir)
 
 
 # ####### Solver ##########
-from solver import OneShotHessianSolver, BaselineSolver
+from solver import OneShotHessianSolver
 from opt import BertQuantizeOp, SPruningOp, PruningOp
 
-#Ops = [BertQuantizeOp, PruningOp]
-Ops = [PruningOp]
+acc = []
+f1 = []
+acc_f1 = []
 
-#solver = OneShotHessianSolver(model.eval(), Ops, configs, tokenizer, logger)
-solver = BaselineSolver(model.eval(), Ops, configs, tokenizer, logger)
-solver.get_solution(100)
+Ops = [BertQuantizeOp, PruningOp]
+solver = OneShotHessianSolver(model_orig.eval(), Ops, configs, tokenizer, logger)
+
+for storage_thresold in np.arange(440, 0, -44):
+
+    model = copy.deepcopy(model_orig)
+
+    print("Getting results for storage threshold {}".format(storage_thresold))
+
+    print("Before optimization:")
+    time_model_evaluation(model, configs, tokenizer, logger)
+
+    solution = solver.get_zzh_solution(storage_thresold)
+    quantize_list = []
+    for layer in solution:
+        for name in layer.split("+"):
+            layer_name, op_name, attrs = name.split("_")
+            if op_name == "upruning":
+                op = PruningOp(model)
+                model = op.apply_([layer_name], amount=float(attrs))
+            elif op_name == "quantize":
+                quantize_list.append(layer_name)
+
+    model.to("cpu")
+    op = BertQuantizeOp(model)
+    op.set_config()
+    mod_model = op.apply(name_list=quantize_list, verbose=False)
+    configs.device = "cpu"
+    results = time_model_evaluation(mod_model, configs, tokenizer, logger)
+    acc.append(results["acc"])
+    f1.append(results["f1"])
+    acc_f1.append(results["acc_and_f1"])
+    plt.plot(np.arange(440, storage_thresold-44, -44), acc, label="acc")
+    plt.plot(np.arange(440, storage_thresold-44, -44), f1, label="f1")
+    plt.plot(np.arange(440, storage_thresold-44, -44), acc_f1, label="acc+f1")
+    plt.legend()
+    plt.savefig("./results/OSHS.pdf", bbox_inches="tight", dpi=500)
+
+
 # #########################
 
 
 # ####### Quantization ##########
 # from opt import BertQuantizeOp
+# model.to("cpu")
 # op = BertQuantizeOp(model)
 # op.set_config()
-# mod_model, diff, storage_save = op.apply(name_list=op.operatable[:3], verbose=False, with_profile=True)
+# mod_model = op.apply(name_list=quantize_list, verbose=False)
+# configs.device = "cpu"
+# time_model_evaluation(mod_model, configs, tokenizer, logger)
 # ###############################
 
 

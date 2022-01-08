@@ -4,13 +4,14 @@ import logging
 import numpy as np
 import random
 import torch
+import copy
 import torch.nn as nn
 
 from argparse import Namespace
 from transformers import (BertConfig, BertForSequenceClassification, BertTokenizer,)
 
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
-from misc.train_bert_emotion import train_bert, evaluate
+from misc.train_bert_emotion import train_bert, evaluate, get_bert_FIM, time_model_evaluation
 from utils import print_size_of_model, model_deviation
 import seaborn as sns
 import matplotlib.pylab as plt
@@ -20,10 +21,10 @@ import matplotlib.pylab as plt
 logger = logging.getLogger(__name__)
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
-                    level = logging.WARN)
+                    level = logging.INFO)
 
 logging.getLogger("transformers.modeling_utils").setLevel(
-   logging.WARN)  # Reduce logging
+   logging.INFO)  # Reduce logging
 
 print(torch.__version__)
 
@@ -36,10 +37,10 @@ configs = Namespace()
 configs.output_dir = "../data/emotion_model/"
 
 # The data directory for the MRPC task in the GLUE benchmark, $GLUE_DIR/$TASK_NAME.
-configs.data_dir = "../data/emotion"
+configs.data_dir = "../data/emotion_data"
 
 # The model name or path for the pre-trained model.
-configs.model_name_or_path = "bert-base-uncased"
+configs.model_name_or_path = "bhadresh-savani/bert-base-uncased-emotion"
 # The maximum length of an input sequence
 configs.max_seq_length = 128
 
@@ -76,20 +77,78 @@ set_seed(42)
 tokenizer = BertTokenizer.from_pretrained(
     "bhadresh-savani/bert-base-uncased-emotion", do_lower_case=configs.do_lower_case)
 
-model = BertForSequenceClassification.from_pretrained("bhadresh-savani/bert-base-uncased-emotion")
-
-evaluate(configs, model, tokenizer, logger)
+model_orig = BertForSequenceClassification.from_pretrained("bhadresh-savani/bert-base-uncased-emotion")
 
 # ####### Solver ##########
-# from solver import OneShotHessianSolver, BaselineSolver
-# from opt import BertQuantizeOp, SPruningOp, PruningOp
+from solver import OneShotHessianSolverEmotion, BaselineSolverEmotion
+from opt import BertQuantizeOp, SPruningOp, PruningOp
 
-# #Ops = [BertQuantizeOp, PruningOp]
-# Ops = [PruningOp]
+# with open('./results/oshs-emotion-quantize-results.npy', 'rb') as f:
+#     prev_result = np.load(f)
 
-# #solver = OneShotHessianSolver(model.eval(), Ops, configs, tokenizer, logger)
-# solver = BaselineSolver(model.eval(), Ops, configs, tokenizer, logger)
-# solver.get_solution(100)
+# if prev_result.shape[0] > 0:
+#     acc = list(prev_result[0,:])
+#     f1 = list(prev_result[1,:])
+#     acc_f1 = list(prev_result[2,:])
+#     threshold_upb = prev_result[-1, -1]
+# else:
+acc = []
+f1 = []
+acc_f1 = []
+threshold_upb = 10000
+
+Ops = [BertQuantizeOp, PruningOp]
+solver = OneShotHessianSolverEmotion(model_orig.eval(), Ops, configs, tokenizer, logger)
+
+print("Before optimization:")
+time_model_evaluation(model_orig, configs, tokenizer, logger)
+
+for storage_thresold in np.arange(solver.model_size, 0, -solver.model_size/10):
+
+    ## TODO::判断threshold 和 upb大小
+
+    model = copy.deepcopy(model_orig)
+    print("Getting results for storage threshold {}".format(storage_thresold))
+
+    solution = solver.get_quantize_solution(storage_thresold)
+    print(solution)
+    quantize_list = []
+    for layer in solution:
+        for name in layer.split("+"):
+            layer_name, op_name, attrs = name.split("_")
+            if op_name == "upruning":
+                # op = PruningOp(model)
+                # model = op.apply_([layer_name], amount=float(attrs))
+                pass
+            elif op_name == "quantize" and attrs != "none":
+                quantize_list.append(layer_name)
+    # model.to("cuda")
+    # configs.device = "gpu"
+    # train_bert(configs, model, tokenizer, logger)
+    model.eval()
+    model.to("cpu")
+    op = BertQuantizeOp(model)
+    op.set_config()
+    if len(quantize_list) > 0:
+        mod_model = op.apply(name_list=quantize_list, verbose=False)
+    else:
+        mod_model = model
+    configs.device = "cpu"
+    results = time_model_evaluation(mod_model, configs, tokenizer, logger)
+    acc.append(results["acc"])
+    f1.append(results["f1"])
+    acc_f1.append(results["acc_and_f1"])
+    plt_range = np.arange(solver.model_size, 0, -solver.model_size/10)[:len(acc)]
+    to_save = np.array([acc, f1, acc_f1, plt_range])
+    print(to_save)
+    with open('./results/oshs-emotion-quantize-results.npy', 'wb') as f:
+        np.save(f, to_save)
+    plt.plot(plt_range, acc, label="acc")
+    plt.plot(plt_range, f1, label="f1")
+    plt.plot(plt_range, acc_f1, label="acc+f1")
+    plt.legend()
+    plt.savefig("./results/OSHS-emotion-quantize.pdf", bbox_inches="tight", dpi=500)
+    plt.clf()
 # #########################
 
 

@@ -1,21 +1,19 @@
-from opt.lowrank import LowRankOp
 from .base_solver import *
 from opt.utils import get_size
 from opt import PruningOp, SPruningOp, BertQuantizeOp
-from misc.train_bert import get_bert_FIM
+from misc.train_bert_emotion import get_bert_FIM
 import matplotlib.pyplot as plt
 import pickle
 import os
 from os.path import exists
 
 
-class BaselineSolver(BaseSolver):
-    def __init__(self, net, ops, task, configs=None, tokenizer=None, logger=None):
+class BaselineSolverEmotion(BaseSolver):
+    def __init__(self, net, ops, configs=None, tokenizer=None, logger=None):
         super().__init__(net, ops)
         self.configs = configs
         self.tokenizer = tokenizer
         self.logger = logger
-        self.task = task
         self.get_all_layer_profile_and_cache()
 
     def get_profile(self, layer_list: list):
@@ -30,45 +28,36 @@ class BaselineSolver(BaseSolver):
                     if isinstance(op, PruningOp) or isinstance(op, SPruningOp):
                         for rate in np.arange(0.00, 1.05, 0.05):
                             _, diff, storage_save = op.apply([layer_name], amount=rate, with_profile=True)
-                            obj = (diff[layer_name] ** 2 * FIM).sum()
+                            obj = ((diff[layer_name] * FIM) ** 2).sum()
                             name = f"{op.op_name}_{layer_name}_{rate:.2f}"
                             loss[name] = obj
-                            storage[name] = storage_save[layer_name]
+                            storage[name] = storage_save[layer_name] * 4e-6
                             profile[name] = storage[name] / (loss[name] + 1e-12)
                     elif isinstance(op, BertQuantizeOp):
-                        op.model.to("cpu")
                         for mode in [None, "fbgemm"]:
                             op.reset()
                             op.set_config(mode)
                             _, diff, storage_save = op.apply([layer_name], with_profile=True)
-                            obj = (diff[layer_name] ** 2 * FIM).sum()
+                            obj = ((diff[layer_name] * FIM) ** 2).sum()
                             name = f"{layer_name}_{op.op_name}_{op.mode}"
                             loss[name] = obj
                             storage[name] = storage_save[layer_name]
                             profile[name] = storage[name] / (loss[name] + 1e-12)
-                    elif isinstance(op, LowRankOp):
-                        for r in np.arange(50, 500, 50):
-                            _, diff, storage_save = op.apply([layer_name], rank=r, with_profile=True)
-                            obj = (diff[layer_name] ** 2 * FIM).sum()
-                            name = f"{op.op_name}_{layer_name}_{r:.2f}"
-                            loss[name] = obj
-                            storage[name] = storage_save[layer_name]
-                            profile[name] = storage[name] / (loss[name] + 1e-12)
+
         return profile, storage, loss
 
     def get_all_layer_profile_and_cache(self):
         data_dir = "results/profileData/"
-        try:
-            self.profile = pickle.load(open(data_dir + f"{self.task}-profile.p", "rb"))
-            self.storage = pickle.load(open(data_dir + f"{self.task}-storage.p", "rb"))
-            self.loss = pickle.load(open(data_dir + f"{self.task}-loss.p", "rb"))
-        except:
-            if not exists(data_dir):
-                os.mkdir(data_dir)
+        if exists(data_dir):
+            self.profile = pickle.load(open(data_dir + "profile.p", "rb"))
+            self.storage = pickle.load(open(data_dir + "storage.p", "rb"))
+            self.loss = pickle.load(open(data_dir + "loss.p", "rb"))
+        else:
+            os.mkdir(data_dir)
             self.profile, self.storage, self.loss = self.get_profile(self.operatable)
-            pickle.dump(self.profile, open(data_dir + f"{self.task}-profile.p", "wb"))
-            pickle.dump(self.storage, open(data_dir + f"{self.task}-storage.p", "wb"))
-            pickle.dump(self.loss, open(data_dir + f"{self.task}-loss.p", "wb"))
+            pickle.dump(self.profile, open(data_dir + "profile.p", "wb"))
+            pickle.dump(self.storage, open(data_dir + "storage.p", "wb"))
+            pickle.dump(self.loss, open(data_dir + "loss.p", "wb"))
         
         op = self.ops[0](self.net)
         self.model_size = sum([self.storage[f"upruning_{layer_name}_0.00"] for layer_name in op.operatable])

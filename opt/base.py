@@ -5,7 +5,7 @@ import os
 
 class BaseOp(object):
     def __init__(self, model: nn.Module):
-        self.model = model.eval()
+        self.model = model
         self.mod_model = None
         self.op_name = None
 

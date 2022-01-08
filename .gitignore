@@ -8,3 +8,6 @@ checkpoint/
 results/
 *.out
 **/*.out
+
+tst-translation/
+t5-small—translation/

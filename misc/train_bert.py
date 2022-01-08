@@ -247,7 +247,8 @@ def train_bert(args, model, tokenizer, logger, prefix=""):
                 outputs = model(**inputs)
                 loss = outputs.loss
                 loss = loss / args.gradient_accumulation_steps
-                accelerator.backward(loss)
+                # accelerator.backward(loss)
+                loss.backward()
                 if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
                     optimizer.step()
                     lr_scheduler.step()
@@ -321,7 +322,7 @@ def get_bert_FIM(args, model, tokenizer, layer_name, logger, prefix=""):
                 progress_bar.update(1)
                 completed_steps += 1
                 weight = model.get_submodule(layer_name).weight.data.cpu().numpy().flatten()
-                if hasattr(model.get_submodule(layer_name), "bias"):
+                if hasattr(model.get_submodule(layer_name), "bias") and model.get_submodule(layer_name).bias is not None:
                     bias = model.get_submodule(layer_name).bias.data.cpu().numpy().flatten()
                     param = np.concatenate([weight, bias], axis=0)
                 else:
@@ -330,7 +331,7 @@ def get_bert_FIM(args, model, tokenizer, layer_name, logger, prefix=""):
                     FIM = param**2
                 else:
                     FIM += param**2
-            model.to("cpu")
+            # model.to("cpu")
             return FIM/args.train_batch_size
 
     return results
