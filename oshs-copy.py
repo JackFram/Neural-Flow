@@ -96,7 +96,7 @@ from opt import BertQuantizeOp, SPruningOp, PruningOp, LowRankOp
 # f1 = []
 # acc_f1 = []
 
-Ops = [BertQuantizeOp, PruningOp]
+Ops = [BertQuantizeOp, LowRankOp]
 # solver = OneShotHessianSolver(model_orig.eval(), Ops, configs, tokenizer, logger)
 # base_solver = BaselineSolver(model_orig.eval(), Ops, configs, tokenizer, logger)
 hession_solver = OneShotHessianSolver(
@@ -109,49 +109,49 @@ hession_solver = OneShotHessianSolver(
 )
 
 
-model = copy.deepcopy(model_orig)
+# model = copy.deepcopy(model_orig)
 
-print("Getting results for storage threshold {}".format(hession_solver.model_size/8))
+# print("Getting results for storage threshold {}".format(hession_solver.model_size/8))
 
-solution = hession_solver.get_zzh_solution(hession_solver.model_size/8)
-if solution is not None:
-    quantize_list = []
-    for layer in solution:
-        for name in layer.split("+"):
-            layer_name, op_name, attrs = name.split("_")
-            if op_name == "upruning":
-                op = PruningOp(model)
-                model = op.apply_([layer_name], amount=float(attrs))
-            elif op_name == "quantize" and attrs != "none":
-                quantize_list.append(layer_name)
+# solution = hession_solver.get_zzh_solution(hession_solver.model_size/8)
+# if solution is not None:
+#     quantize_list = []
+#     for layer in solution:
+#         for name in layer.split("+"):
+#             layer_name, op_name, attrs = name.split("_")
+#             if op_name == "upruning":
+#                 op = PruningOp(model)
+#                 model = op.apply_([layer_name], amount=float(attrs))
+#             elif op_name == "quantize" and attrs != "none":
+#                 quantize_list.append(layer_name)
 
-    model.to("cuda")
-    configs.device = "gpu"
-    train_bert(configs, model, tokenizer, logger)
-    model.eval()
-    model.to("cpu")
-    configs.device = "cpu"
-    op = BertQuantizeOp(model)
-    op.set_config()
-    if len(quantize_list) > 0:
-        mod_model = op.apply(name_list=quantize_list, verbose=False)
-    else:
-        mod_model = model
-    results = time_model_evaluation(mod_model, configs, tokenizer, logger)
-    print(results["acc"])
+#     model.to("cuda")
+#     configs.device = "gpu"
+#     train_bert(configs, model, tokenizer, logger)
+#     model.eval()
+#     model.to("cpu")
+#     configs.device = "cpu"
+#     op = BertQuantizeOp(model)
+#     op.set_config()
+#     if len(quantize_list) > 0:
+#         mod_model = op.apply(name_list=quantize_list, verbose=False)
+#     else:
+#         mod_model = model
+#     results = time_model_evaluation(mod_model, configs, tokenizer, logger)
+#     print(results["acc"])
 
-# oshs_acc, _, _ = evaluate_solver(hession_solver, hession_solver.get_zzh_solution, model_orig)
+oshs_acc, _, _ = evaluate_solver(hession_solver, hession_solver.get_zzh_solution, model_orig)
 # quant_acc, _, _ = evaluate_solver(hession_solver, hession_solver.get_quantize_solution, model_orig)
 # prune_acc, _, _ = evaluate_solver(base_solver, base_solver.get_solution, model_orig)
-#
+
 # quant_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size/10)[:len(quant_acc)]
-# oshs_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size/10)
-#
+oshs_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size/10)
+
 # plt.plot(quant_range, quant_acc, label="pure_quant_acc")
-# plt.plot(oshs_range, oshs_acc, label="oshs_acc")
+plt.plot(oshs_range, oshs_acc, label="oshs_acc")
 # plt.plot(oshs_range, prune_acc, label="prune_acc")
-# plt.legend()
-# plt.savefig("./results/QP_OSHS_ft.pdf", bbox_inches="tight", dpi=500)
+plt.legend()
+plt.savefig("./results/oshs-L-Q.pdf", bbox_inches="tight", dpi=500)
 
 
 # print("Before optimization:")

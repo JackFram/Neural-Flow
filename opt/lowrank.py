@@ -211,15 +211,16 @@ class SVDDecomposedConvLayer():
 class LowRankOp(BaseOp):
     def __init__(self, model: nn.Module, rank=10):
         super().__init__(model)
-        self.op_name = "low rank"
+        self.op_name = "lowrank"
         self.rank = rank
         self.mod_model = None
 
+    # rank <= 0 是特殊情况， 不apply变化
     def apply(self, name_list, rank=None, verbose=False, with_profile=False, *args, **kwargs):
         if rank is None:
            rank = self.rank 
         diff = {}
-        storage_save = {}
+        storage_used = {}
         model_to_lowrank = copy.deepcopy(self.model)
         for name in set(name_list):
             if name not in self.operatable:
@@ -234,17 +235,21 @@ class LowRankOp(BaseOp):
             if with_profile:
                 param = self.get_param(mod)
 
-            self.low_rank_(prevmod, mod_name, mod, rank)
+            if rank > 0:
+                self.low_rank_(prevmod, mod_name, mod, rank)
 
             if with_profile:
                 param_ = self.get_param(model_to_lowrank.get_submodule(name))
                 diff[name] = param - param_
                 dim_in, dim_out = mod.weight.data.cpu().numpy().shape
-                storage_save[name] = (dim_in + dim_out) * rank
+                if rank > 0:
+                    storage_used[name] = (dim_in + dim_out) * rank
+                else:
+                    storage_used[name] = dim_in * dim_out
 
         self.mod_model = model_to_lowrank
         if with_profile:
-            return self.mod_model, diff, storage_save
+            return self.mod_model, diff, storage_used
         else:
             return self.mod_model
 

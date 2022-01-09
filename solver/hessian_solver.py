@@ -1,5 +1,7 @@
+from collections import defaultdict
+import itertools
 from .base_solver import *
-from opt import PruningOp, SPruningOp, BertQuantizeOp
+from opt import PruningOp, SPruningOp, BertQuantizeOp, LowRankOp
 from misc.train_bert import get_bert_FIM
 from misc.translation import get_translation_FIM
 import matplotlib.pyplot as plt
@@ -24,7 +26,7 @@ class OneShotHessianSolver(BaseSolver):
             self.get_FIM_func = get_translation_FIM
         else:
             raise AttributeError("task name not existed")
-        self._init()
+        self._czy_init()
 
     def _init(self):
         info_fn = f"./{self.task_name}-info.pkl"
@@ -92,6 +94,47 @@ class OneShotHessianSolver(BaseSolver):
         self.all_s = all_s
         self.model_size = self.all_s[:, 0].sum()
 
+    def _czy_init(self):
+        info_fn = f"./{self.task_name}-czy-info.pkl"
+        if os.path.exists(info_fn):
+            with open(info_fn, "rb") as fp:
+                info = pickle.load(fp)
+                print(f"Load saved {info_fn} of OSHS solver.")
+
+                self.all_l = np.array(info["l"])
+                self.all_name = info["name"]
+                self.all_s = np.array(info["s"])
+                self.model_size = self.all_s[:, 0].sum()
+                self.cand = self.operatable
+            return
+
+        all_name,all_l,all_s = [], [], []
+        self.cand = self.operatable
+        for i, layer_name in enumerate(self.cand):
+            print(f"Get profile count: {i+1}/{len(self.cand)}")
+            _, storage, loss = self.get_profile(layer_name)
+            temp_dic = defaultdict(list)
+            for k, v in loss.items():
+                _, op_name, attrs = k.split("@")
+                temp_dic[op_name].append((k, v, storage[k]))  # name, loss, storage
+
+            layer_name, layer_l, layer_s = [], [], []
+            for comb in itertools.product(temp_dic['lowrank'], temp_dic['quantize']):
+                layer_name.append("+".join([tup[0] for tup in comb]))
+                layer_l.append(comb[0][1]+comb[1][1])
+                layer_s.append(comb[0][2]*comb[1][2])
+            all_name.append(layer_name)
+            all_l.append(layer_l)
+            all_s.append(layer_s)
+
+        info = {"name": all_name, "s": all_s, "l": all_l}
+        with open(info_fn, "wb") as fp:
+            pickle.dump(info, fp)
+        self.all_l = np.array(all_l)
+        self.all_name = all_name
+        self.all_s = np.array(all_s)
+        self.model_size = self.all_s[:, 0].sum()
+
     def get_profile(self, layer_name: str):
         profile = {}
         storage = {}
@@ -118,6 +161,14 @@ class OneShotHessianSolver(BaseSolver):
                         # print(f"layer name: {layer_name}, quantization mode: {mode}, diff norm: {np.linalg.norm(diff[layer_name]*FIM)}.")
                         obj = (diff[layer_name] ** 2 * FIM).sum()
                         name = f"{layer_name}@{op.op_name}@{op.mode}"
+                        loss[name] = obj
+                        storage[name] = storage_save[layer_name]
+                        profile[name] = storage[name] / (loss[name] + 1e-12)
+                elif isinstance(op, LowRankOp):
+                    for r in np.arange(0, 500, 50):
+                        _, diff, storage_save = op.apply([layer_name], rank=r, with_profile=True)
+                        obj = (diff[layer_name] ** 2 * FIM).sum()
+                        name = f"{layer_name}@{op.op_name}@{r}"
                         loss[name] = obj
                         storage[name] = storage_save[layer_name]
                         profile[name] = storage[name] / (loss[name] + 1e-12)
