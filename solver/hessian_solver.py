@@ -2,6 +2,7 @@ from collections import defaultdict
 import itertools
 from .base_solver import *
 from opt import PruningOp, SPruningOp, BertQuantizeOp, LowRankOp
+# from opt import PruningOp, SPruningOp, BertQuantizeOp
 from misc.train_bert import get_bert_FIM
 from misc.translation import get_translation_FIM
 import matplotlib.pyplot as plt
@@ -18,15 +19,18 @@ class OneShotHessianSolver(BaseSolver):
         self.tokenizer = tokenizer
         self.logger = logger
         self.task_name = task_name
-        if task_name == "MRPC":
+        if "MRPC" in task_name:
             self.get_FIM_func = get_bert_FIM
-        elif task_name == "MarianMT-wmt16":
+        elif "MarianMT-wmt16" in task_name:
             self.get_FIM_func = get_translation_FIM
-        elif task_name == "t5-small-wmt16":
+        elif "t5-small-wmt16" in task_name:
             self.get_FIM_func = get_translation_FIM
         else:
             raise AttributeError("task name not existed")
-        self._czy_init()
+        if "czy" in task_name:
+            self._czy_init()
+        else: 
+            self._init()
 
     def _init(self):
         info_fn = f"./{self.task_name}-info.pkl"
@@ -99,8 +103,7 @@ class OneShotHessianSolver(BaseSolver):
         if os.path.exists(info_fn):
             with open(info_fn, "rb") as fp:
                 info = pickle.load(fp)
-                print(f"Load saved {info_fn} of OSHS solver.")
-
+                print(f"Load saved {self.task_name}-info of OSHS solver.")
                 self.all_l = np.array(info["l"])
                 self.all_name = info["name"]
                 self.all_s = np.array(info["s"])
@@ -174,25 +177,25 @@ class OneShotHessianSolver(BaseSolver):
                         profile[name] = storage[name] / (loss[name] + 1e-12)
         return profile, storage, loss
 
-    def get_assignment(self, storage_threshold: float):
+    def get_assignment(self, storage_threshold: float, temp: float=1e-2):
         mean_loss = self.all_l.mean(axis=1)
-        assign = storage_threshold * mean_loss / mean_loss.sum()
-        # mean_loss = np.log(mean_loss)
-        # mean_loss = mean_loss - mean_loss.max()
-        # exp_loss = np.exp(- temp * mean_loss)
-        # # score = exp_loss / exp_loss.sum()
+        mean_loss = np.log(mean_loss)
+        mean_loss = mean_loss - mean_loss.max()
+        exp_loss = np.exp(temp * mean_loss)
+        assign = storage_threshold * exp_loss / exp_loss.sum()
+        print(assign, self.all_s[:, 0])
         while np.any(assign > self.all_s[:, 0]):
             # print(assign > self.all_s[:, 0])
             # print(assign)
             # print(assign.sum())
             zero_mask = assign <= self.all_s[:, 0]
-            mean_loss *= zero_mask
+            exp_loss *= zero_mask
             storage_overflow = (~zero_mask) * (assign - self.all_s[:, 0])
             storage_overflow = storage_overflow.sum()
             assign = np.minimum(assign, self.all_s[:, 0])
-            if mean_loss.sum() == 0:
+            if exp_loss.sum() == 0:
                 break
-            assign += storage_overflow * mean_loss / mean_loss.sum()
+            assign += storage_overflow * exp_loss / exp_loss.sum()
 
         return assign
 
@@ -266,6 +269,27 @@ class OneShotHessianSolver(BaseSolver):
         # print(p)
         solution = []
         print("Getting solution for pure pruning")
+        for i in range(len(self.all_name)):
+            upb = self.all_s[i, 0] * p[i]
+            best = None
+            best_name = None
+            # print(upb, self.all_l[i, :], self.all_s[i, :])
+            for j in range(self.all_l.shape[1]):
+                if j % 2 == 0 and self.all_s[i, j] <= upb:
+                    if best is None:
+                        best = self.all_l[i, j]
+                        best_name = self.all_name[i][j]
+                    elif self.all_l[i, j] < best:
+                        best = self.all_l[i, j]
+                        best_name = self.all_name[i][j]
+            solution.append(best_name)
+        return solution
+
+    def get_lowrank_solution(self, storage_threshold):
+        p = np.ones((len(self.cand),)) * (min(storage_threshold, self.model_size)/self.model_size)
+        # print(p)
+        solution = []
+        print("Getting solution for pure lowrank")
         for i in range(len(self.all_name)):
             upb = self.all_s[i, 0] * p[i]
             best = None
