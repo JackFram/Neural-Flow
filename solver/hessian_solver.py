@@ -55,7 +55,7 @@ class OneShotHessianSolver(BaseSolver):
         self.cand = layer_list
         for i, layer_name in enumerate(self.cand):
             print(f"Get profile count: {i+1}/{len(self.cand)}")
-            profile, storage, loss = self.get_profile(layer_name)  # 0.35, 0.50, 0.30
+            profile, storage, loss, _ = self.get_profile(layer_name)  # 0.35, 0.50, 0.30
             name_p = []
             name_q = []
             l_p = []
@@ -99,7 +99,7 @@ class OneShotHessianSolver(BaseSolver):
         self.model_size = self.all_s[:, 0].sum()
 
     def _czy_init(self):
-        info_fn = f"./{self.task_name}-czy-info.pkl"
+        info_fn = f"./{self.task_name}-info.pkl"
         if os.path.exists(info_fn):
             with open(info_fn, "rb") as fp:
                 info = pickle.load(fp)
@@ -115,17 +115,18 @@ class OneShotHessianSolver(BaseSolver):
         self.cand = self.operatable
         for i, layer_name in enumerate(self.cand):
             print(f"Get profile count: {i+1}/{len(self.cand)}")
-            _, storage, loss = self.get_profile(layer_name)
+            _, storage, loss, original_size = self.get_profile(layer_name)
             temp_dic = defaultdict(list)
             for k, v in loss.items():
                 _, op_name, attrs = k.split("@")
                 temp_dic[op_name].append((k, v, storage[k]))  # name, loss, storage
 
             layer_name, layer_l, layer_s = [], [], []
-            for comb in itertools.product(temp_dic['lowrank'], temp_dic['quantize']):
+            for comb in itertools.product(temp_dic['lowrank'], temp_dic['pruning'], temp_dic['quantize']):
                 layer_name.append("+".join([tup[0] for tup in comb]))
-                layer_l.append(comb[0][1]+comb[1][1])
-                layer_s.append(comb[0][2]*comb[1][2])
+                layer_l.append(sum([tup[1] for tup in comb]))
+                print(f"{layer_name[-1]}: old: {original_size} new: {[tup[2] for tup in comb]}")
+                layer_s.append(original_size * np.prod([tup[2] for tup in comb]))
             all_name.append(layer_name)
             all_l.append(layer_l)
             all_s.append(layer_s)
@@ -142,6 +143,7 @@ class OneShotHessianSolver(BaseSolver):
         profile = {}
         storage = {}
         loss = {}
+        original_size = None
         for Op in self.ops:
             op = Op(self.net)
             if layer_name in op.operatable:
@@ -155,6 +157,8 @@ class OneShotHessianSolver(BaseSolver):
                         loss[name] = obj
                         storage[name] = storage_save[layer_name]
                         profile[name] = storage[name] / (loss[name] + 1e-12)
+                        if original_size is None:
+                            original_size = diff[layer_name].size
                 elif isinstance(op, BertQuantizeOp):
                     op.model.to("cpu")
                     for mode in [None, "fbgemm"]:
@@ -167,37 +171,60 @@ class OneShotHessianSolver(BaseSolver):
                         loss[name] = obj
                         storage[name] = storage_save[layer_name]
                         profile[name] = storage[name] / (loss[name] + 1e-12)
+                        if original_size is None:
+                            original_size = diff[layer_name].size
                 elif isinstance(op, LowRankOp):
-                    for r in np.arange(0, 500, 50):
-                        _, diff, storage_save = op.apply([layer_name], rank=r, with_profile=True)
+                    for r in np.arange(1.00, -0.05, -0.05):
+                        _, diff, storage_save = op.apply([layer_name], rank_fraction=r, with_profile=True)
                         obj = (diff[layer_name] ** 2 * FIM).sum()
-                        name = f"{layer_name}@{op.op_name}@{r}"
+                        name = f"{layer_name}@{op.op_name}@{r:.2f}"
                         loss[name] = obj
                         storage[name] = storage_save[layer_name]
                         profile[name] = storage[name] / (loss[name] + 1e-12)
-        return profile, storage, loss
+                        if original_size is None:
+                            original_size = diff[layer_name].size
+        return profile, storage, loss, original_size
 
-    def get_assignment(self, storage_threshold: float, temp: float=1e-2):
-        mean_loss = self.all_l.mean(axis=1)
-        mean_loss = np.log(mean_loss)
-        mean_loss = mean_loss - mean_loss.max()
-        exp_loss = np.exp(temp * mean_loss)
-        assign = storage_threshold * exp_loss / exp_loss.sum()
-        print(assign, self.all_s[:, 0])
-        while np.any(assign > self.all_s[:, 0]):
-            # print(assign > self.all_s[:, 0])
-            # print(assign)
-            # print(assign.sum())
-            zero_mask = assign <= self.all_s[:, 0]
-            exp_loss *= zero_mask
-            storage_overflow = (~zero_mask) * (assign - self.all_s[:, 0])
-            storage_overflow = storage_overflow.sum()
-            assign = np.minimum(assign, self.all_s[:, 0])
-            if exp_loss.sum() == 0:
-                break
-            assign += storage_overflow * exp_loss / exp_loss.sum()
+    def get_assignment(self, storage_threshold: float, p_min:float=0.4, p_max:float=0.6):
+        layer_loss = self.all_l[:, -1]
+        mean_loss = layer_loss / self.all_s[:, 0]
+        print(f"mean loss: {mean_loss}")
+        p = mean_loss / mean_loss.sum()
+        p = np.clip(p, p_min, p_max)
+        mem = (p*self.all_s[:, 0]).sum()
 
-        return assign
+        p = (storage_threshold / mem) * p
+        p[p >= 1.] = 1.
+        assign_storage = p * self.all_s[:, 0]
+        overflow_storage = storage_threshold - assign_storage.sum()
+
+        while True:
+            print(p)
+            print(f"overflow storage: {overflow_storage}")
+            if np.isclose(overflow_storage, 0.):
+                print(f"assignment: {assign_storage}")
+                return assign_storage
+            cand_flag = p < 1.
+            mean_loss *= cand_flag
+
+            p_inc = mean_loss / mean_loss.sum()
+            p_inc = np.clip(p_inc, p_min, p_max)
+            mem = (p_inc * self.all_s[:, 0]).sum()
+            p_inc = (overflow_storage / mem) * p_inc
+            p += p_inc
+            p[p >= 1.] = 1.
+            assign_storage = p * self.all_s[:, 0]
+            overflow_storage = storage_threshold - assign_storage.sum()
+    
+    def should_skip(name:str, methods:set) -> bool:
+        for name in name.split("+"):
+            _, op_name, attrs = name.split("@")
+            if op_name not in methods:
+                if (op_name == "upruning" and float(attrs) != 0.00) or (
+                    op_name == "quantize" and attrs != "none") or (
+                    op_name == "lowrank" and float(attrs) != 1.00):
+                    return True
+        return False
 
     def get_solution(self, storage_threshold: float):
 
@@ -231,6 +258,25 @@ class OneShotHessianSolver(BaseSolver):
                         best = self.all_l[i, j]
                         best_name = self.all_name[i][j]
                     elif self.all_l[i, j] < best:
+                        best = self.all_l[i, j]
+                        best_name = self.all_name[i][j]
+            solution.append(best_name)
+        return solution
+
+    def get_filtered_solution(self, storage_threshold: float, methods: set):
+        p = np.ones((len(self.cand),)) * (min(storage_threshold, self.model_size)/self.model_size)
+        # p = self.get_assignment(storage_threshold)
+        print(p)
+        solution = []
+        for i in range(len(self.all_name)):
+            upb = p[i]
+            best = None
+            best_name = None
+            for j in range(self.all_l.shape[1]):
+                if self.all_s[i, j] <= upb:
+                    if self.should_skip(self.all_name[i][j], methods):
+                        continue
+                    if best is None or self.all_l[i, j] < best:
                         best = self.all_l[i, j]
                         best_name = self.all_name[i][j]
             solution.append(best_name)

@@ -102,9 +102,6 @@ class BertQuantizeOp(BaseOp):
 
         }
 
-    def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):
-        raise NotImplementedError
-
     def set_config(self, config="fbgemm"):
         '''
 

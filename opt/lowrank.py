@@ -37,7 +37,10 @@ class SVDDecomposedLayer():
 
         self.new_layers.weight.data = torch.matmul(w1, w0)
 
-        self.new_layers.bias.data = b
+        if b is not None:
+            self.new_layers.bias.data = b
+        else:
+            self.new_layers.bias = None
 
         # for j, (w, b)  in enumerate(zip(weights, biases)):
         #     self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).weight.data = w
@@ -134,19 +137,30 @@ class SVDDecomposedConvLayer():
         self.rank = rank
             
         ##### create decomposed layers
-        self.new_layers = nn.Sequential()
+        # self.new_layers = nn.Sequential()
         
-        for j, l in enumerate(self.create_new_layers()):
-            self.new_layers.add_module('{}-{}'.format(self.layer_name, j), l)
+        # for j, l in enumerate(self.create_new_layers()):
+        #     self.new_layers.add_module('{}-{}'.format(self.layer_name, j), l)
         
-        weights, biases = self.get_svd_factors()        
+        self.new_layers = nn.Conv2d(in_channels = self.in_channels, 
+                                    out_channels = self.out_channels, 
+                                    padding = self.layer.padding, 
+                                    stride = self.layer.stride)
+        [w0, w1], [_, b] = self.get_svd_factors()  
+
+        self.new_layers.weight.data = torch.matmul(w1, w0)
+
+        if b is not None:
+            self.new_layers.bias.data = b
+        else:
+            self.new_layers.bias = None      
         
-        for j, (w, b)  in enumerate(zip(weights, biases)):
-            self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).weight.data = w
-            if b is not None:
-                self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias.data = b
-            else:
-                self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias = None 
+        # for j, (w, b)  in enumerate(zip(weights, biases)):
+        #     self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).weight.data = w
+        #     if b is not None:
+        #         self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias.data = b
+        #     else:
+        #         self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias = None 
                 
         self.layer = None
         self.weight = None
@@ -209,18 +223,17 @@ class SVDDecomposedConvLayer():
         return [w0, w1], [None, bias]
 
 class LowRankOp(BaseOp):
-    def __init__(self, model: nn.Module, rank=10):
+    def __init__(self, model: nn.Module, rank_fraction=1):
         super().__init__(model)
         self.op_name = "lowrank"
-        self.rank = rank
+        self.rank_fraction = rank_fraction
         self.mod_model = None
 
-    # rank <= 0 是特殊情况， 不apply变化
-    def apply(self, name_list, rank=None, verbose=False, with_profile=False, *args, **kwargs):
-        if rank is None:
-           rank = self.rank 
+    def apply(self, name_list, rank_fraction=None, verbose=False, with_profile=False, *args, **kwargs):
+        if rank_fraction is None:
+           rank_fraction = self.rank_fraction 
         diff = {}
-        storage_used = {}
+        storage_save = {}
         model_to_lowrank = copy.deepcopy(self.model)
         for name in set(name_list):
             if name not in self.operatable:
@@ -235,21 +248,19 @@ class LowRankOp(BaseOp):
             if with_profile:
                 param = self.get_param(mod)
 
-            if rank > 0:
-                self.low_rank_(prevmod, mod_name, mod, rank)
+            dim_in, dim_out = mod.weight.data.cpu().numpy().shape
+            rank = int(rank_fraction * dim_in * dim_out / (dim_in + dim_out))
+
+            self.low_rank_(prevmod, mod_name, mod, rank)
 
             if with_profile:
                 param_ = self.get_param(model_to_lowrank.get_submodule(name))
                 diff[name] = param - param_
-                dim_in, dim_out = mod.weight.data.cpu().numpy().shape
-                if rank > 0:
-                    storage_used[name] = (dim_in + dim_out) * rank
-                else:
-                    storage_used[name] = dim_in * dim_out
+                storage_save[name] = rank_fraction
 
         self.mod_model = model_to_lowrank
         if with_profile:
-            return self.mod_model, diff, storage_used
+            return self.mod_model, diff, storage_save
         else:
             return self.mod_model
 
@@ -262,7 +273,7 @@ class LowRankOp(BaseOp):
 
     def get_param(self, mod:nn.modules):
         weight = mod.weight.data.cpu().numpy().flatten()
-        if hasattr(mod, "bias"):
+        if hasattr(mod, "bias") and mod.bias:
             bias = mod.bias.data.cpu().numpy().flatten()
             return np.concatenate([weight, bias], axis=0)
         return weight

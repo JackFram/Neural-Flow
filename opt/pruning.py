@@ -22,40 +22,28 @@ class PruningOp(BaseOp):
     def apply(self, name_list, verbose=False, amount=None, with_profile=False, *args, **kwargs):
         if amount is not None:
             self.amount = amount
-        name_set = set()
         diff = {}
         storage_save = {}
-        for name in name_list:
+        model_to_prune = copy.deepcopy(self.model)
+        for name in set(name_list):
             if name not in self.operatable:
                 print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
                 raise AttributeError
-            name_set.add(name)
 
-        model_to_prune = copy.deepcopy(self.model)
-        for mod_name, mod in model_to_prune.named_modules():
-            if mod_name in name_set:
-                if with_profile:
-                    weight = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias") and mod.bias is not None:
-                        bias = mod.bias.data.cpu().numpy().flatten()
-                        param = np.concatenate([weight, bias], axis=0)
-                    else:
-                        param = weight
+            mod = model_to_prune.get_submodule(name)
+            if with_profile:
+                param = self.get_param(mod)
 
-                if verbose:
-                    print(f"Module weights before pruning: {list(mod.named_parameters())}")
-                self._prune(mod)
-                if with_profile:
-                    weight = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias") and mod.bias is not None:
-                        bias = mod.bias.data.cpu().numpy().flatten()
-                        param_ = np.concatenate([weight, bias], axis=0)
-                    else:
-                        param_ = weight
-                    diff[mod_name] = param - param_
-                    storage_save[mod_name] = int(param.size * (1-self.amount))
-                if verbose:
-                    print(f"Module weights after pruning: {list(mod.named_parameters())}")
+            if verbose:
+                print(f"Module weights before pruning: {list(mod.named_parameters())}")
+            self._prune(mod)
+            if with_profile:
+                param_ = self.get_param(mod)
+                diff[name] = param - param_
+                storage_save[name] = 1 - self.amount
+            if verbose:
+                print(f"Module weights after pruning: {list(mod.named_parameters())}")
+
         self.mod_model = model_to_prune
         if with_profile:
             return self.mod_model, diff, storage_save
@@ -104,19 +92,6 @@ class PruningOp(BaseOp):
         else:
             return self.mod_model
 
-    def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):
-        mod_model = self.apply(name_list, verbose)
-
-        print("Finetuning...")
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        mod_model.to(device)
-        criterion = nn.CrossEntropyLoss()
-        optimizer_ft = optim.SGD(mod_model.parameters(), lr=1e-3, momentum=0.9, weight_decay=0.1)
-        exp_lr_scheduler = optim.lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.3)
-        self.mod_model = train_model(mod_model, criterion, optimizer_ft, exp_lr_scheduler,
-                                     num_epochs=2, device=device)
-        return self.mod_model
-
     def _prune(self, module:nn.Module):
         if self.method == "l1":
             prune.l1_unstructured(module, 'weight', amount=self.amount)
@@ -130,6 +105,13 @@ class PruningOp(BaseOp):
 
     def reset(self):
         self.config = None
+
+    def get_param(self, mod:nn.modules):
+        weight = mod.weight.data.cpu().numpy().flatten()
+        if hasattr(mod, "bias") and mod.bias:
+            bias = mod.bias.data.cpu().numpy().flatten()
+            return np.concatenate([weight, bias], axis=0)
+        return weight
 
     @property
     def operatable(self):
