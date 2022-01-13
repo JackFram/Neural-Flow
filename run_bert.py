@@ -4,7 +4,6 @@ import logging
 import numpy as np
 import random
 import torch
-import copy
 import torch.nn as nn
 
 from argparse import Namespace
@@ -14,9 +13,11 @@ from transformers import glue_processors as processors
 
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
 from misc.train_bert import train_bert, time_model_evaluation, get_bert_FIM
-from utils import print_size_of_model, model_deviation
+from utils import print_size_of_model, model_deviation, evaluate_solver
 import seaborn as sns
 import matplotlib.pylab as plt
+import pickle
+import copy
 
 
 # Setup logging
@@ -64,9 +65,9 @@ configs.local_rank = -1
 configs.overwrite_cache = False
 
 # Set Training arguments
-configs.learning_rate = 2e-5
+configs.learning_rate = 2e-7
 configs.weight_decay = 0.0
-configs.num_train_epochs = 3
+configs.num_train_epochs = 150
 configs.max_train_steps = None
 configs.gradient_accumulation_steps = 1
 configs.lr_scheduler_type = "linear"
@@ -86,26 +87,34 @@ model_orig = BertForSequenceClassification.from_pretrained(configs.output_dir)
 
 
 # ####### Solver ##########
-from solver import OneShotHessianSolver
-from opt import BertQuantizeOp, SPruningOp, PruningOp
+from solver import OneShotHessianSolver, BaselineSolver
+from opt import BertQuantizeOp, SPruningOp, PruningOp, LowRankOp
 
-acc = []
-f1 = []
-acc_f1 = []
+# quant_acc = []
+# oshs_acc = []
+# prune_acc = []
+# f1 = []
+# acc_f1 = []
 
 Ops = [BertQuantizeOp, PruningOp]
-solver = OneShotHessianSolver(model_orig.eval(), Ops, configs, tokenizer, logger)
+# solver = OneShotHessianSolver(model_orig.eval(), Ops, configs, tokenizer, logger)
+# base_solver = BaselineSolver(model_orig.eval(), Ops, configs, tokenizer, logger)
+hession_solver = OneShotHessianSolver(
+    net=model_orig.eval(),
+    ops=Ops,
+    configs=configs,
+    tokenizer=tokenizer,
+    logger=logger,
+    task_name="MRPC"
+)
 
-for storage_thresold in np.arange(440, 0, -44):
 
-    model = copy.deepcopy(model_orig)
+model = copy.deepcopy(model_orig)
 
-    print("Getting results for storage threshold {}".format(storage_thresold))
+print("Getting results for storage threshold {}".format(hession_solver.model_size/8))
 
-    print("Before optimization:")
-    time_model_evaluation(model, configs, tokenizer, logger)
-
-    solution = solver.get_zzh_solution(storage_thresold)
+solution = hession_solver.get_zzh_solution(hession_solver.model_size/8)
+if solution is not None:
     quantize_list = []
     for layer in solution:
         for name in layer.split("+"):
@@ -113,36 +122,146 @@ for storage_thresold in np.arange(440, 0, -44):
             if op_name == "upruning":
                 op = PruningOp(model)
                 model = op.apply_([layer_name], amount=float(attrs))
-            elif op_name == "quantize":
+            elif op_name == "quantize" and attrs != "none":
                 quantize_list.append(layer_name)
 
+    model.to("cuda")
+    configs.device = "gpu"
+    train_bert(configs, model, tokenizer, logger)
+    model.eval()
     model.to("cpu")
+    configs.device = "cpu"
     op = BertQuantizeOp(model)
     op.set_config()
-    mod_model = op.apply(name_list=quantize_list, verbose=False)
-    configs.device = "cpu"
+    if len(quantize_list) > 0:
+        mod_model = op.apply(name_list=quantize_list, verbose=False)
+    else:
+        mod_model = model
     results = time_model_evaluation(mod_model, configs, tokenizer, logger)
-    acc.append(results["acc"])
-    f1.append(results["f1"])
-    acc_f1.append(results["acc_and_f1"])
-    plt.plot(np.arange(440, storage_thresold-44, -44), acc, label="acc")
-    plt.plot(np.arange(440, storage_thresold-44, -44), f1, label="f1")
-    plt.plot(np.arange(440, storage_thresold-44, -44), acc_f1, label="acc+f1")
-    plt.legend()
-    plt.savefig("./results/OSHS.pdf", bbox_inches="tight", dpi=500)
+    print(results["acc"])
+
+# oshs_acc, _, _ = evaluate_solver(hession_solver, hession_solver.get_zzh_solution, model_orig)
+# quant_acc, _, _ = evaluate_solver(hession_solver, hession_solver.get_quantize_solution, model_orig)
+# prune_acc, _, _ = evaluate_solver(base_solver, base_solver.get_solution, model_orig)
+#
+# quant_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size/10)[:len(quant_acc)]
+# oshs_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size/10)
+#
+# plt.plot(quant_range, quant_acc, label="pure_quant_acc")
+# plt.plot(oshs_range, oshs_acc, label="oshs_acc")
+# plt.plot(oshs_range, prune_acc, label="prune_acc")
+# plt.legend()
+# plt.savefig("./results/QP_OSHS_ft.pdf", bbox_inches="tight", dpi=500)
+
+
+# print("Before optimization:")
+# time_model_evaluation(model_orig, configs, tokenizer, logger)
+#
+# for storage_thresold in np.arange(solver.model_size, 0, -solver.model_size/10):
+#
+#     model = copy.deepcopy(model_orig)
+#
+#     print("Getting results for storage threshold {}".format(storage_thresold))
+#
+#     solution = solver.get_solution(storage_thresold)
+#     if solution is not None:
+#         quantize_list = []
+#         for layer in solution:
+#             for name in layer.split("+"):
+#                 layer_name, op_name, attrs = name.split("_")
+#                 if op_name == "upruning":
+#                     op = PruningOp(model)
+#                     model = op.apply_([layer_name], amount=float(attrs))
+#                 elif op_name == "quantize" and attrs != "none":
+#                     quantize_list.append(layer_name)
+#
+#         model.to("cuda")
+#         configs.device = "gpu"
+#         train_bert(configs, model, tokenizer, logger)
+#         model.eval()
+#         # model.to("cpu")
+#         # configs.device = "cpu"
+#         # op = BertQuantizeOp(model)
+#         # op.set_config()
+#         # print(quantize_list)
+#         if len(quantize_list) > 0:
+#             mod_model = op.apply(name_list=quantize_list, verbose=False)
+#         else:
+#             mod_model = model
+#         results = time_model_evaluation(mod_model, configs, tokenizer, logger)
+#         prune_acc.append(results["acc"])
+#
+#         # f1.append(results["f1"])
+#         # acc_f1.append(results["acc_and_f1"])
+
+# pickle.dump(prune_acc, open("./results/MRPC/" + "prune_acc.p", "wb"))
+
+# for storage_thresold in np.arange(solver.model_size, 0, -solver.model_size/10):
+#
+#     model = copy.deepcopy(model_orig)
+#
+#     print("Getting results for storage threshold {}".format(storage_thresold))
+#
+#     solution = solver.get_zzh_solution(storage_thresold)
+#     if solution is not None:
+#         quantize_list = []
+#         for layer in solution:
+#             for name in layer.split("+"):
+#                 layer_name, op_name, attrs = name.split("_")
+#                 if op_name == "upruning":
+#                     op = PruningOp(model)
+#                     model = op.apply_([layer_name], amount=float(attrs))
+#                 elif op_name == "quantize" and attrs != "none":
+#                     quantize_list.append(layer_name)
+#
+#         model.to("cuda")
+#         configs.device = "gpu"
+#         train_bert(configs, model, tokenizer, logger)
+#         model.eval()
+#         model.to("cpu")
+#         configs.device = "cpu"
+#         op = BertQuantizeOp(model)
+#         op.set_config()
+#         if len(quantize_list) > 0:
+#             mod_model = op.apply(name_list=quantize_list, verbose=False)
+#         else:
+#             mod_model = model
+#         results = time_model_evaluation(mod_model, configs, tokenizer, logger)
+#         oshs_acc.append(results["acc"])
+
+# quant_acc = pickle.load(open("./results/MRPC/" + "quant_acc.p", "rb"))
+# prune_acc = pickle.load(open("./results/MRPC/" + "prune_acc.p", "rb"))
+# oshs_acc = pickle.load(open("./results/MRPC/" + "oshs_acc.p", "rb"))
+# quant_range = np.arange(solver.model_size, 0, -solver.model_size/10)[:len(quant_acc)]
+# oshs_range = np.arange(solver.model_size, 0, -solver.model_size/10)
+# #
+# plt.plot(quant_range, quant_acc, label="pure_quant_acc")
+# plt.plot(oshs_range, oshs_acc, label="oshs_acc")
+# plt.plot(oshs_range, prune_acc, label="prune_acc")
+# plt.legend()
+# plt.savefig("./results/QP_OSHS_ft.pdf", bbox_inches="tight", dpi=500)
+
+# pickle.dump(quant_acc, open("./results/MRPC/" + "quant_acc.p", "wb"))
+# pickle.dump(oshs_acc, open("./results/MRPC/" + "oshs_acc.p", "wb"))
+# plt.plot(np.arange(solver.model_size, 0, -solver.model_size/10), acc, label="acc")
+# plt.plot(np.arange(solver.model_size, 0, -solver.model_size/10), f1, label="f1")
+# plt.plot(np.arange(solver.model_size, 0, -solver.model_size/10), acc_f1, label="acc+f1")
+# plt.scatter(solver.model_size-255.2, 0.860, label="pure quantization")
+# plt.legend()
+# plt.savefig("./results/OSHS_ft.pdf", bbox_inches="tight", dpi=500)
 
 
 # #########################
 
 
 # ####### Quantization ##########
-# from opt import BertQuantizeOp
-# model.to("cpu")
-# op = BertQuantizeOp(model)
+# from opt import QuantizeOp
+# model_orig.to("cpu")
+# op = QuantizeOp(model_orig)
 # op.set_config()
-# mod_model = op.apply(name_list=quantize_list, verbose=False)
-# configs.device = "cpu"
-# time_model_evaluation(mod_model, configs, tokenizer, logger)
+# mod_model = op.apply(name_list=op.operatable, verbose=False)
+# configs.device = "gpu"
+# time_model_evaluation(mod_model.cuda(), configs, tokenizer, logger)
 # ###############################
 
 

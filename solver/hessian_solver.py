@@ -122,11 +122,10 @@ class OneShotHessianSolver(BaseSolver):
                 temp_dic[op_name].append((k, v, storage[k]))  # name, loss, storage
 
             layer_name, layer_l, layer_s = [], [], []
-            for comb in itertools.product(temp_dic['lowrank'], temp_dic['pruning'], temp_dic['quantize']):
+            for comb in itertools.product(temp_dic['lowrank'], temp_dic['upruning'], temp_dic['quantize']):
                 layer_name.append("+".join([tup[0] for tup in comb]))
                 layer_l.append(sum([tup[1] for tup in comb]))
-                print(f"{layer_name[-1]}: old: {original_size} new: {[tup[2] for tup in comb]}")
-                layer_s.append(original_size * np.prod([tup[2] for tup in comb]))
+                layer_s.append(original_size * np.prod([max(0.00, tup[2]) for tup in comb]))
             all_name.append(layer_name)
             all_l.append(layer_l)
             all_s.append(layer_s)
@@ -216,7 +215,7 @@ class OneShotHessianSolver(BaseSolver):
             assign_storage = p * self.all_s[:, 0]
             overflow_storage = storage_threshold - assign_storage.sum()
     
-    def should_skip(name:str, methods:set) -> bool:
+    def should_skip(self, name:str, methods:set) -> bool:
         for name in name.split("+"):
             _, op_name, attrs = name.split("@")
             if op_name not in methods:
@@ -269,7 +268,8 @@ class OneShotHessianSolver(BaseSolver):
         print(p)
         solution = []
         for i in range(len(self.all_name)):
-            upb = p[i]
+            upb = self.all_s[i, 0] * p[i]
+            #upb = p[i]
             best = None
             best_name = None
             for j in range(self.all_l.shape[1]):

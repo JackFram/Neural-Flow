@@ -725,44 +725,44 @@ def main():
         data_args=data_args,
         training_args=training_args
     )
-    q_loss = evaluate_wmt_solver(
-        solver=hession_solver,
-        get_solution_func=hession_solver.get_quantize_solution,
-        model_orig=model,
-        raw_datasets=raw_datasets,
-        model_args=model_args,
-        data_args=data_args,
-        training_args=training_args
-    )
-    p_loss = evaluate_wmt_solver(
-        solver=hession_solver,
-        get_solution_func=hession_solver.get_pruning_solution,
-        model_orig=model,
-        raw_datasets=raw_datasets,
-        model_args=model_args,
-        data_args=data_args,
-        training_args=training_args
-    )
-    r_loss = evaluate_wmt_solver(
-        solver=hession_solver,
-        get_solution_func=hession_solver.get_random_solution,
-        model_orig=model,
-        raw_datasets=raw_datasets,
-        model_args=model_args,
-        data_args=data_args,
-        training_args=training_args
-    )
-    s_loss = evaluate_wmt_solver(
-        solver=hession_solver,
-        get_solution_func=hession_solver.get_max_storage_solution,
-        model_orig=model,
-        raw_datasets=raw_datasets,
-        model_args=model_args,
-        data_args=data_args,
-        training_args=training_args
-    )
+    # q_loss = evaluate_wmt_solver(
+    #     solver=hession_solver,
+    #     get_solution_func=hession_solver.get_quantize_solution,
+    #     model_orig=model,
+    #     raw_datasets=raw_datasets,
+    #     model_args=model_args,
+    #     data_args=data_args,
+    #     training_args=training_args
+    # )
+    # p_loss = evaluate_wmt_solver(
+    #     solver=hession_solver,
+    #     get_solution_func=hession_solver.get_pruning_solution,
+    #     model_orig=model,
+    #     raw_datasets=raw_datasets,
+    #     model_args=model_args,
+    #     data_args=data_args,
+    #     training_args=training_args
+    # )
+    # r_loss = evaluate_wmt_solver(
+    #     solver=hession_solver,
+    #     get_solution_func=hession_solver.get_random_solution,
+    #     model_orig=model,
+    #     raw_datasets=raw_datasets,
+    #     model_args=model_args,
+    #     data_args=data_args,
+    #     training_args=training_args
+    # )
+    # s_loss = evaluate_wmt_solver(
+    #     solver=hession_solver,
+    #     get_solution_func=hession_solver.get_max_storage_solution,
+    #     model_orig=model,
+    #     raw_datasets=raw_datasets,
+    #     model_args=model_args,
+    #     data_args=data_args,
+    #     training_args=training_args
+    # )
 
-    np.savez("./results/data/t5-small-wmt16_with_assign.npz", q_loss=q_loss, p_loss=p_loss, oshs_loss=loss, r_loss=r_loss, s_loss=s_loss)
+    # np.savez("./results/data/t5-small-wmt16_with_assign.npz", q_loss=q_loss, p_loss=p_loss, oshs_loss=loss, r_loss=r_loss, s_loss=s_loss)
 
     # data = np.load("./results/data/t5-small-wmt16.npz")
     # q_loss = data["q_loss"]
@@ -771,17 +771,18 @@ def main():
     # r_loss = data["r_loss"]
     # s_loss = data["s_loss"]
 
-    quant_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 10)[:len(q_loss)]
-    oshs_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 10)
-    plt.plot(quant_range, q_loss, label="pure_quant_loss")
-    plt.plot(oshs_range, loss, label="oshs_loss")
-    plt.plot(oshs_range, p_loss, label="prune_loss")
-    plt.plot(oshs_range, r_loss, label="random_loss")
-    plt.plot(oshs_range, s_loss, label="max_storage_loss")
-    plt.legend()
-    plt.savefig("./results/QP_wmt_t5small_wa_OSHS_ft.pdf", bbox_inches="tight", dpi=500)
+    # quant_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 10)[:len(q_loss)]
+    # oshs_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 10)
+    # plt.plot(quant_range, q_loss, label="pure_quant_loss")
+    # plt.plot(oshs_range, loss, label="oshs_loss")
+    # plt.plot(oshs_range, p_loss, label="prune_loss")
+    # plt.plot(oshs_range, r_loss, label="random_loss")
+    # plt.plot(oshs_range, s_loss, label="max_storage_loss")
+    # plt.legend()
+    # plt.savefig("./results/QP_wmt_t5small_wa_OSHS_ft.pdf", bbox_inches="tight", dpi=500)
 
-    print(f"Score: oshs_loss:{get_score(loss)}, q_loss:{get_score(q_loss)}, p_loss:{get_score(p_loss)}, r_loss:{get_score(r_loss)}, s_loss:{get_score(s_loss)}.")
+    # print(f"Score: oshs_loss:{get_score(loss)}, q_loss:{get_score(q_loss)}, p_loss:{get_score(p_loss)}, r_loss:{get_score(r_loss)}, s_loss:{get_score(s_loss)}.")
+    print(f"Score: oshs_loss:{get_score(loss)}.")
 
 if __name__ == "__main__":
     main()

@@ -733,7 +733,7 @@ def main():
     #     data_args=data_args,
     #     training_args=training_args
     # )
-    l_loss = evaluate_wmt_solver(
+    loss = evaluate_wmt_solver(
         solver=hession_solver,
         get_solution_func=hession_solver.get_filtered_solution,
         model_orig=model,
@@ -779,7 +779,8 @@ def main():
     #     data_args=data_args,
     #     training_args=training_args
     # )
-    np.savez("./results/data/t5-small-wmt16_lowrank.npz", l_loss=l_loss)
+    #np.savez("./results/data/t5-small-wmt16_lowrank.npz", l_loss=l_loss)
+    np.savez("./results/data/t5-small-wmt16-QPL", oshs_loss=loss)
     # np.savez("./results/data/t5-small-wmt16_with_assign.npz", q_loss=q_loss, p_loss=p_loss, oshs_loss=loss, r_loss=r_loss, s_loss=s_loss)
 
     # data = np.load("./results/data/t5-small-wmt16.npz")
@@ -790,16 +791,17 @@ def main():
     # s_loss = data["s_loss"]
 
     # quant_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 10)[:len(q_loss)]
-    lowrank_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 10)[:len(l_loss)]
-    plt.plot(lowrank_range, l_loss, label="low_rank_loss")
+    # lowrank_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 10)[:len(l_loss)]
+    oshs_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 10)
+    # plt.plot(lowrank_range, l_loss, label="low_rank_loss")
     # plt.plot(quant_range, q_loss, label="pure_quant_loss")
-    # plt.plot(oshs_range, loss, label="oshs_loss")
+    plt.plot(oshs_range, loss, label="oshs_loss")
     # plt.plot(oshs_range, p_loss, label="prune_loss")
     # plt.plot(oshs_range, r_loss, label="random_loss")
     # plt.plot(oshs_range, s_loss, label="max_storage_loss")
     # plt.legend()
 
-    plt.savefig("./results/QP_wmt_t5small_lowrank_ft.pdf", bbox_inches="tight", dpi=500)
+    plt.savefig("./results/t5-small-wmt16-QPL.pdf", bbox_inches="tight", dpi=500)
 
     # print(f"Score: oshs_loss:{get_score(loss)}, q_loss:{get_score(q_loss)}, p_loss:{get_score(p_loss)}, r_loss:{get_score(r_loss)}, s_loss:{get_score(s_loss)}.")
     # print(f"Score: oshs_loss:{get_score(loss)}.")

@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 from misc.train_bert import train_bert, time_model_evaluation
-from opt import BertQuantizeOp, PruningOp, LowRankOp
+# from opt import BertQuantizeOp, PruningOp
 import copy
 
 
@@ -62,11 +62,8 @@ def evaluate_solver(solver, get_solution_func, model_orig):
             quantize_list = []
             for layer in solution:
                 for name in layer.split("+"):
-                    layer_name, op_name, attrs = name.split("@")
-                    if op_name == "lowrank":
-                        op = LowRankOp(model)
-                        model = op.apply([layer_name], rank=(int(attrs)))
-                    elif op_name == "upruning":
+                    layer_name, op_name, attrs = name.split("_")
+                    if op_name == "upruning":
                         op = PruningOp(model)
                         model = op.apply_([layer_name], amount=float(attrs))
                     elif op_name == "quantize" and attrs != "none":

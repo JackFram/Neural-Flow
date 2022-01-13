@@ -251,7 +251,8 @@ class LowRankOp(BaseOp):
             dim_in, dim_out = mod.weight.data.cpu().numpy().shape
             rank = int(rank_fraction * dim_in * dim_out / (dim_in + dim_out))
 
-            self.low_rank_(prevmod, mod_name, mod, rank)
+            if rank_fraction < 1:
+                self.low_rank_(prevmod, mod_name, mod, rank)
 
             if with_profile:
                 param_ = self.get_param(model_to_lowrank.get_submodule(name))
