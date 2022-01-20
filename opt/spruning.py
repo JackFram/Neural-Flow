@@ -21,39 +21,49 @@ class SPruningOp(BaseOp):
     def apply(self, name_list, verbose=False, amount=None, with_profile=False, *args, **kwargs):
         if amount is not None:
             self.amount = amount
-        name_set = set()
         diff = {}
         storage_save = {}
-        for name in name_list:
+        model_to_prune = copy.deepcopy(self.model)
+        for name in set(name_list):
+            if name + ".SVDLinear-0" in self.operatable:
+                mod_1 = model_to_prune.get_submodule(name+".SVDLinear-0")
+                mod_2 = model_to_prune.get_submodule(name+".SVDLinear-1")
+                self._prune(mod_1)
+                self._prune(mod_2)
+                self.mod_model = model_to_prune
+                if with_profile:
+                    raise ValueError("Currently doesn't support get profile for SVD layer.")
+                return self.mod_model
+
+            if name + ".SVDConv-0" in self.operatable:
+                mod_1 = model_to_prune.get_submodule(name+".SVDConv-0")
+                mod_2 = model_to_prune.get_submodule(name+".SVDConv-1")
+                self._prune(mod_1)
+                self._prune(mod_2)
+                self.mod_model = model_to_prune
+                if with_profile:
+                    raise ValueError("Currently doesn't support get profile for SVD layer.")
+                return self.mod_model
+
             if name not in self.operatable:
                 print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
                 raise AttributeError
-            name_set.add(name)
 
-        model_to_prune = copy.deepcopy(self.model)
-        for mod_name, mod in model_to_prune.named_modules():
-            if mod_name in name_set:
-                if with_profile:
-                    weight = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias") and mod.bias is not None:
-                        bias = mod.bias.data.cpu().numpy().flatten()
-                        param = np.concatenate([weight, bias], axis=0)
-                    else:
-                        param = weight
-                if verbose:
-                    print(f"Module weights before pruning: {list(mod.named_parameters())}")
-                self._prune(mod)
-                if with_profile:
-                    weight = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias") and mod.bias is not None:
-                        bias = mod.bias.data.cpu().numpy().flatten()
-                        param_ = np.concatenate([weight, bias], axis=0)
-                    else:
-                        param_ = weight
-                    diff[mod_name] = param - param_
-                    storage_save[mod_name] = param.size * (1-self.amount)
-                if verbose:
-                    print(f"Module weights after pruning: {list(mod.named_parameters())}")
+            mod = model_to_prune.get_submodule(name)
+            if with_profile:
+                param = self.get_param(mod)
+
+            if verbose:
+                print(f"Module weights before pruning: {list(mod.named_parameters())}")
+            self._prune(mod)
+            if with_profile:
+                param_ = self.get_param(mod)
+                diff[name] = param - param_
+                # print(amount, np.linalg.norm(diff[name]), np.abs(diff[name]).max())
+                storage_save[name] = 1 - self.amount
+            if verbose:
+                print(f"Module weights after pruning: {list(mod.named_parameters())}")
+
         self.mod_model = model_to_prune
         if with_profile:
             return self.mod_model, diff, storage_save
@@ -73,6 +83,13 @@ class SPruningOp(BaseOp):
 
     def set_config(self, config={}):
         self.config = config
+
+    def get_param(self, mod:nn.modules):
+        weight = mod.weight.data.cpu().numpy().flatten()
+        if hasattr(mod, "bias") and mod.bias is not None:
+            bias = mod.bias.data.cpu().numpy().flatten()
+            return np.concatenate([weight, bias], axis=0)
+        return weight
 
     def reset(self):
         self.config = None

@@ -33,7 +33,7 @@ class OneShotHessianSolver(BaseSolver):
             self._init()
 
     def _init(self):
-        info_fn = f"./{self.task_name}-info.pkl"
+        info_fn = f"./info/{self.task_name}-info.pkl"
         if os.path.exists(info_fn):
             with open(info_fn, "rb") as fp:
                 info = pickle.load(fp)
@@ -99,7 +99,7 @@ class OneShotHessianSolver(BaseSolver):
         self.model_size = self.all_s[:, 0].sum()
 
     def _czy_init(self):
-        info_fn = f"./{self.task_name}-info.pkl"
+        info_fn = f"./info/{self.task_name}-info.pkl"
         if os.path.exists(info_fn):
             with open(info_fn, "rb") as fp:
                 info = pickle.load(fp)
@@ -122,7 +122,7 @@ class OneShotHessianSolver(BaseSolver):
                 temp_dic[op_name].append((k, v, storage[k]))  # name, loss, storage
 
             layer_name, layer_l, layer_s = [], [], []
-            for comb in itertools.product(temp_dic['lowrank'], temp_dic['upruning'], temp_dic['quantize']):
+            for comb in itertools.product(temp_dic['spruning'], temp_dic['lowrank'], temp_dic['upruning'], temp_dic['quantize']):
                 layer_name.append("+".join([tup[0] for tup in comb]))
                 layer_l.append(sum([tup[1] for tup in comb]))
                 layer_s.append(original_size * np.prod([max(0.00, tup[2]) for tup in comb]))
@@ -131,8 +131,9 @@ class OneShotHessianSolver(BaseSolver):
             all_s.append(layer_s)
 
         info = {"name": all_name, "s": all_s, "l": all_l}
-        with open(info_fn, "wb") as fp:
-            pickle.dump(info, fp)
+        if "try" not in info_fn:
+            with open(info_fn, "wb") as fp:
+                pickle.dump(info, fp)
         self.all_l = np.array(all_l)
         self.all_name = all_name
         self.all_s = np.array(all_s)
@@ -173,7 +174,7 @@ class OneShotHessianSolver(BaseSolver):
                         if original_size is None:
                             original_size = diff[layer_name].size
                 elif isinstance(op, LowRankOp):
-                    for r in np.arange(1.00, -0.05, -0.05):
+                    for r in np.arange(1.00, 0.00, -0.05):
                         _, diff, storage_save = op.apply([layer_name], rank_fraction=r, with_profile=True)
                         obj = (diff[layer_name] ** 2 * FIM).sum()
                         name = f"{layer_name}@{op.op_name}@{r:.2f}"
@@ -187,8 +188,9 @@ class OneShotHessianSolver(BaseSolver):
     def get_assignment(self, storage_threshold: float, p_min:float=0.4, p_max:float=0.6):
         layer_loss = self.all_l[:, -1]
         mean_loss = layer_loss / self.all_s[:, 0]
-        print(f"mean loss: {mean_loss}")
+        # print(f"mean loss: {mean_loss}")
         p = mean_loss / mean_loss.sum()
+        p = p / (2*p.mean())
         p = np.clip(p, p_min, p_max)
         mem = (p*self.all_s[:, 0]).sum()
 
@@ -198,15 +200,14 @@ class OneShotHessianSolver(BaseSolver):
         overflow_storage = storage_threshold - assign_storage.sum()
 
         while True:
-            print(p)
-            print(f"overflow storage: {overflow_storage}")
             if np.isclose(overflow_storage, 0.):
-                print(f"assignment: {assign_storage}")
+                print(f"returned p: {p}")
                 return assign_storage
             cand_flag = p < 1.
             mean_loss *= cand_flag
 
             p_inc = mean_loss / mean_loss.sum()
+            p_inc = p_inc / (2 * p_inc.mean())
             p_inc = np.clip(p_inc, p_min, p_max)
             mem = (p_inc * self.all_s[:, 0]).sum()
             p_inc = (overflow_storage / mem) * p_inc
@@ -221,7 +222,8 @@ class OneShotHessianSolver(BaseSolver):
             if op_name not in methods:
                 if (op_name == "upruning" and float(attrs) != 0.00) or (
                     op_name == "quantize" and attrs != "none") or (
-                    op_name == "lowrank" and float(attrs) != 1.00):
+                    op_name == "lowrank" and float(attrs) != 1.00) or \
+                   (op_name == "spruning" and float(attrs) != 0.00):
                     return True
         return False
 
@@ -243,7 +245,7 @@ class OneShotHessianSolver(BaseSolver):
 
         # p = np.ones((len(self.cand),)) * (min(storage_threshold, self.model_size)/self.model_size)
         p = self.get_assignment(storage_threshold)
-        print(p)
+        # print(p)
         solution = []
         for i in range(len(self.all_name)):
             upb = p[i]
@@ -252,7 +254,7 @@ class OneShotHessianSolver(BaseSolver):
             best_name = None
             # print(upb, self.all_l[i, :], self.all_s[i, :])
             for j in range(self.all_l.shape[1]):
-                if self.all_s[i, j] <= upb:
+                if self.all_s[i, j] <= upb+1e-4:
                     if best is None:
                         best = self.all_l[i, j]
                         best_name = self.all_name[i][j]
@@ -263,17 +265,16 @@ class OneShotHessianSolver(BaseSolver):
         return solution
 
     def get_filtered_solution(self, storage_threshold: float, methods: set):
-        p = np.ones((len(self.cand),)) * (min(storage_threshold, self.model_size)/self.model_size)
-        # p = self.get_assignment(storage_threshold)
-        print(p)
+        # p = np.ones((len(self.cand),)) * (min(storage_threshold, self.model_size)/self.model_size)
+        p = self.get_assignment(storage_threshold)
         solution = []
         for i in range(len(self.all_name)):
-            upb = self.all_s[i, 0] * p[i]
-            #upb = p[i]
+            # upb = self.all_s[i, 0] * p[i]
+            upb = p[i]
             best = None
             best_name = None
             for j in range(self.all_l.shape[1]):
-                if self.all_s[i, j] <= upb:
+                if self.all_s[i, j] <= upb + 1e-4:
                     if self.should_skip(self.all_name[i][j], methods):
                         continue
                     if best is None or self.all_l[i, j] < best:

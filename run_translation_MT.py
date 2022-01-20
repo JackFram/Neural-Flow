@@ -34,6 +34,8 @@ import numpy as np
 import matplotlib.pylab as plt
 from datasets import load_dataset, load_metric
 from utils import get_score
+from prettytable import PrettyTable
+
 
 import transformers
 from transformers import (
@@ -55,9 +57,6 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
-
-
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.15.0.dev0")
@@ -102,7 +101,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+                    "with private models)."
         },
     )
 
@@ -127,7 +126,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "An optional input evaluation data file to evaluate the metrics (sacreblue) on "
-            "a jsonlines file."
+                    "a jsonlines file."
         },
     )
     test_file: Optional[str] = field(
@@ -147,59 +146,59 @@ class DataTrainingArguments:
         default=512,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+                    "than this will be truncated, sequences shorter will be padded."
         },
     )
     max_target_length: Optional[int] = field(
         default=128,
         metadata={
             "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+                    "than this will be truncated, sequences shorter will be padded."
         },
     )
     val_max_target_length: Optional[int] = field(
         default=None,
         metadata={
             "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
-            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
-            "during ``evaluate`` and ``predict``."
+                    "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                    "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+                    "during ``evaluate`` and ``predict``."
         },
     )
     pad_to_max_length: bool = field(
         default=False,
         metadata={
             "help": "Whether to pad all samples to model maximum sentence length. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
-            "efficient on GPU but very bad for TPU."
+                    "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
+                    "efficient on GPU but very bad for TPU."
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     num_beams: Optional[int] = field(
         default=None,
         metadata={
             "help": "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
-            "which is used during ``evaluate`` and ``predict``."
+                    "which is used during ``evaluate`` and ``predict``."
         },
     )
     ignore_pad_token_for_loss: bool = field(
@@ -215,8 +214,8 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "The token to force as the first generated token after the :obj:`decoder_start_token_id`."
-            "Useful for multilingual models like :doc:`mBART <../model_doc/mbart>` where the first generated token "
-            "needs to be the target language token.(Usually it is the target language token)"
+                    "Useful for multilingual models like :doc:`mBART <../model_doc/mbart>` where the first generated token "
+                    "needs to be the target language token.(Usually it is the target language token)"
         },
     )
 
@@ -519,9 +518,38 @@ def train_wmt16(solver, model, raw_datasets, model_args, data_args, training_arg
     return results
 
 
-def evaluate_wmt_solver(solver, get_solution_func, model_orig, raw_datasets, model_args, data_args, training_args, **kwargs):
+def print_configuration(solution):
+    name_row = ["Layer", "sp", "lowrank", "up", "quantize"]
+    t = PrettyTable(name_row)
+    for layer in solution:
+        r = []
+        layer_name = (layer.split("+"))[0].split("@")[0]
+        r.append(layer_name)
+        for name in layer.split("+"):
+            layer_name, op_name, attrs = name.split("@")
+            if op_name == "upruning":
+                r.append(float(attrs))
+            elif op_name == "quantize":
+                if attrs != "none":
+                    r.append(1)
+                else:
+                    r.append(0)
+            elif op_name == "lowrank":
+                r.append(float(attrs))
+            elif op_name == "spruning":
+                r.append(float(attrs))
+            print(r)
+        t.add_row(r)
+    print(t)
+
+
+def evaluate_wmt_solver(solver, get_solution_func, model_orig, raw_datasets, model_args, data_args, training_args,
+                        **kwargs):
     loss = []
-    for storage_thresold in np.arange(solver.model_size, 0, -solver.model_size/20):
+
+    last_threshold = None
+
+    for storage_thresold in np.arange(solver.model_size, 0, -solver.model_size / 20):
 
         model = copy.deepcopy(model_orig)
 
@@ -531,6 +559,10 @@ def evaluate_wmt_solver(solver, get_solution_func, model_orig, raw_datasets, mod
         else:
             solution = get_solution_func(storage_thresold)
         # print(f"solution: {solution}")
+
+        # if storage_thresold == np.arange(solver.model_size, 0, -solver.model_size / 20)[-1]:
+        # print_configuration(solution)
+
         if solution is not None:
             quantize_list = []
             for layer in solution:
@@ -539,8 +571,11 @@ def evaluate_wmt_solver(solver, get_solution_func, model_orig, raw_datasets, mod
                     if op_name == "upruning":
                         op = PruningOp(model)
                         model = op.apply([layer_name], amount=float(attrs))
-                    elif op_name == "quantize" and attrs != "none":
-                        quantize_list.append(layer_name)
+                    elif op_name == "quantize":
+                        if attrs != "none":
+                            quantize_list.append(layer_name)
+                        else:
+                            continue
                     elif op_name == "lowrank":
                         op = LowRankOp(model)
                         model = op.apply([layer_name], rank_fraction=(float(attrs)))
@@ -553,6 +588,7 @@ def evaluate_wmt_solver(solver, get_solution_func, model_orig, raw_datasets, mod
             training_args.save_strategy = "no"
             training_args.max_steps = 3000
             training_args.no_cuda = False
+
             results = train_wmt16(
                 solver=solver,
                 model=model,
@@ -715,73 +751,61 @@ def main():
     # )
 
     tokenizer = AutoTokenizer.from_pretrained(
-        "t5-small—translation/checkpoint-457500"
+        "tst-translation/checkpoint-457500"
     )
 
     model = AutoModelForSeq2SeqLM.from_pretrained(
-        "t5-small—translation/checkpoint-457500"
+        "tst-translation/checkpoint-457500"
     )
 
     model.resize_token_embeddings(len(tokenizer))
 
     # FIM = get_translation_FIM(None, model, tokenizer, op.operatable[0], logger)
     Ops = [BertQuantizeOp, PruningOp, LowRankOp, SPruningOp]
-    hession_solver = OneShotHessianSolver(model.eval(), Ops, config, tokenizer, logger, task_name="t5-small-wmt16-czy-full")
-    # loss = evaluate_wmt_solver(
-    #     solver=hession_solver,
-    #     get_solution_func=hession_solver.get_zzh_solution,
-    #     model_orig=model,
-    #     raw_datasets=raw_datasets,
-    #     model_args=model_args,
-    #     data_args=data_args,
-    #     training_args=training_args
-    # )
-    # lq_loss = evaluate_wmt_solver(
-    #     solver=hession_solver,
-    #     get_solution_func=hession_solver.get_filtered_solution,
-    #     model_orig=model,
-    #     raw_datasets=raw_datasets,
-    #     model_args=model_args,
-    #     data_args=data_args,
-    #     training_args=training_args,
-    #     methods={'quantize', 'lowrank'}
-    # )
-    
-    # lq_loss = [1.429, 1.4328, 1.4328, 1.4328, 1.4328, 1.5205, 1.5205, 1.5205, 1.5205, 1.5205, 1.5205, 1.5205, 1.5205, 1.5205, 1.5205, 1.7743, 1.9957, 2.7768, 3.8524, 5.9477]
-    
-    # l_loss = evaluate_wmt_solver(
-    #     solver=hession_solver,
-    #     get_solution_func=hession_solver.get_filtered_solution,
-    #     model_orig=model,
-    #     raw_datasets=raw_datasets,
-    #     model_args=model_args,
-    #     data_args=data_args,
-    #     training_args=training_args,
-    #     methods={"lowrank"}
-    # )
+    hession_solver = OneShotHessianSolver(model.eval(), Ops, config, tokenizer, logger,
+                                          task_name="MarianMT-wmt16-czy-full")
+    lq_loss = evaluate_wmt_solver(
+        solver=hession_solver,
+        get_solution_func=hession_solver.get_filtered_solution,
+        model_orig=model,
+        raw_datasets=raw_datasets,
+        model_args=model_args,
+        data_args=data_args,
+        training_args=training_args,
+        methods={'quantize', 'lowrank'}
+    )
 
-    # l_loss = [1.429, 1.5587, 1.5944, 1.6955, 1.7695, 1.8979, 2.0674, 2.2706, 2.547, 2.8398, 3.178, 3.6058, 3.6638, 4.1246, 4.7156, 5.3854, 5.8748, 6.1862, 6.3674]
+    l_loss = evaluate_wmt_solver(
+        solver=hession_solver,
+        get_solution_func=hession_solver.get_filtered_solution,
+        model_orig=model,
+        raw_datasets=raw_datasets,
+        model_args=model_args,
+        data_args=data_args,
+        training_args=training_args,
+        methods={"lowrank"}
+    )
 
-    # d_loss = evaluate_wmt_solver(
-    #     solver=hession_solver,
-    #     get_solution_func=hession_solver.get_filtered_solution,
-    #     model_orig=model,
-    #     raw_datasets=raw_datasets,
-    #     model_args=model_args,
-    #     data_args=data_args,
-    #     training_args=training_args,
-    #     methods={"spruning"}
-    # )
-    # pq_loss = evaluate_wmt_solver(
-    #     solver=hession_solver,
-    #     get_solution_func=hession_solver.get_filtered_solution,
-    #     model_orig=model,
-    #     raw_datasets=raw_datasets,
-    #     model_args=model_args,
-    #     data_args=data_args,
-    #     training_args=training_args,
-    #     methods={"upruning", "quantize"}
-    # )
+    d_loss = evaluate_wmt_solver(
+        solver=hession_solver,
+        get_solution_func=hession_solver.get_filtered_solution,
+        model_orig=model,
+        raw_datasets=raw_datasets,
+        model_args=model_args,
+        data_args=data_args,
+        training_args=training_args,
+        methods={"spruning"}
+    )
+    pq_loss = evaluate_wmt_solver(
+        solver=hession_solver,
+        get_solution_func=hession_solver.get_filtered_solution,
+        model_orig=model,
+        raw_datasets=raw_datasets,
+        model_args=model_args,
+        data_args=data_args,
+        training_args=training_args,
+        methods={"upruning", "quantize"}
+    )
     pqdl_loss = evaluate_wmt_solver(
         solver=hession_solver,
         get_solution_func=hession_solver.get_filtered_solution,
@@ -792,42 +816,42 @@ def main():
         training_args=training_args,
         methods={"spruning", "upruning", "quantize", "lowrank"}
     )
-    # q_loss = evaluate_wmt_solver(
-    #     solver=hession_solver,
-    #     get_solution_func=hession_solver.get_quantize_solution,
-    #     model_orig=model,
-    #     raw_datasets=raw_datasets,
-    #     model_args=model_args,
-    #     data_args=data_args,
-    #     training_args=training_args
-    # )
-    # p_loss = evaluate_wmt_solver(
-    #     solver=hession_solver,
-    #     get_solution_func=hession_solver.get_pruning_solution,
-    #     model_orig=model,
-    #     raw_datasets=raw_datasets,
-    #     model_args=model_args,
-    #     data_args=data_args,
-    #     training_args=training_args
-    # )
-    # r_loss = evaluate_wmt_solver(
-    #     solver=hession_solver,
-    #     get_solution_func=hession_solver.get_random_solution,
-    #     model_orig=model,
-    #     raw_datasets=raw_datasets,
-    #     model_args=model_args,
-    #     data_args=data_args,
-    #     training_args=training_args
-    # )
-    # s_loss = evaluate_wmt_solver(
-    #     solver=hession_solver,
-    #     get_solution_func=hession_solver.get_max_storage_solution,
-    #     model_orig=model,
-    #     raw_datasets=raw_datasets,
-    #     model_args=model_args,
-    #     data_args=data_args,
-    #     training_args=training_args
-    # )
+    q_loss = evaluate_wmt_solver(
+        solver=hession_solver,
+        get_solution_func=hession_solver.get_quantize_solution,
+        model_orig=model,
+        raw_datasets=raw_datasets,
+        model_args=model_args,
+        data_args=data_args,
+        training_args=training_args
+    )
+    p_loss = evaluate_wmt_solver(
+        solver=hession_solver,
+        get_solution_func=hession_solver.get_pruning_solution,
+        model_orig=model,
+        raw_datasets=raw_datasets,
+        model_args=model_args,
+        data_args=data_args,
+        training_args=training_args
+    )
+    r_loss = evaluate_wmt_solver(
+        solver=hession_solver,
+        get_solution_func=hession_solver.get_random_solution,
+        model_orig=model,
+        raw_datasets=raw_datasets,
+        model_args=model_args,
+        data_args=data_args,
+        training_args=training_args
+    )
+    s_loss = evaluate_wmt_solver(
+        solver=hession_solver,
+        get_solution_func=hession_solver.get_max_storage_solution,
+        model_orig=model,
+        raw_datasets=raw_datasets,
+        model_args=model_args,
+        data_args=data_args,
+        training_args=training_args
+    )
 
     # data = np.load("./results/data/t5-small-wmt16_all.npz")
     # q_loss = data["q_loss"]
@@ -838,7 +862,9 @@ def main():
     # lq_loss = data["lq_loss"]
     # l_loss = data["l_loss"]
     # d_loss = data["d_loss"]
-    np.savez("./results/data/t5-small-wmt16_all.npz", q_loss=q_loss, p_loss=p_loss, pqdl_loss=pqdl_loss, r_loss=r_loss, s_loss=s_loss, lq_loss=lq_loss, l_loss=l_loss, d_loss=d_loss, pq_loss=pq_loss)
+
+    np.savez("./results/data/MarianMT-wmt16_all.npz", q_loss=q_loss, p_loss=p_loss, pqdl_loss=pqdl_loss, r_loss=r_loss,
+             s_loss=s_loss, lq_loss=lq_loss, l_loss=l_loss, d_loss=d_loss, pq_loss=pq_loss)
 
     quant_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 20)[:len(q_loss)]
     l_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 20)[:len(l_loss)]
@@ -854,10 +880,11 @@ def main():
     plt.plot(oshs_range, s_loss, label="max_storage_loss")
     plt.legend()
 
-    plt.savefig("./results/t5-small-wmt16-all.pdf", bbox_inches="tight", dpi=500)
+    plt.savefig("./results/MarianMT-wmt16-all.pdf", bbox_inches="tight", dpi=500)
 
     # print(f"Score: oshs_loss:{get_score(loss)}, q_loss:{get_score(q_loss)}, p_loss:{get_score(p_loss)}, r_loss:{get_score(r_loss)}, s_loss:{get_score(s_loss)}.")
     # print(f"Score: oshs_loss:{get_score(loss)}.")
+
 
 if __name__ == "__main__":
     main()
