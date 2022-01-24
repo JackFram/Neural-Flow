@@ -4,6 +4,7 @@ from .base_solver import *
 from opt import PruningOp, SPruningOp, BertQuantizeOp, LowRankOp
 # from opt import PruningOp, SPruningOp, BertQuantizeOp
 from misc.train_bert import get_bert_FIM
+from misc.cv_utils import get_cv_FIM
 from misc.translation import get_translation_FIM
 import matplotlib.pyplot as plt
 import cvxpy as cp
@@ -19,7 +20,9 @@ class OneShotHessianSolver(BaseSolver):
         self.tokenizer = tokenizer
         self.logger = logger
         self.task_name = task_name
-        if "MRPC" in task_name:
+        if "cifar10" in task_name or "image" in task_name:
+            self.get_FIM_func = get_cv_FIM
+        elif "MRPC" in task_name:
             self.get_FIM_func = get_bert_FIM
         elif "MarianMT-wmt16" in task_name:
             self.get_FIM_func = get_translation_FIM
