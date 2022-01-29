@@ -2,10 +2,9 @@ import copy
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
 from .base import BaseOp
+from .utils import get_size
 from collections import OrderedDict
-# from misc.train import train_model
 
 from torch.quantization.quantize_fx import prepare_fx, convert_fx
 from torch.quantization import default_dynamic_qconfig, float_qparams_weight_only_qconfig, get_default_qconfig
@@ -21,7 +20,7 @@ class QuantizeOp(BaseOp):
             "module_name": OrderedDict()
         }
 
-    def apply(self, name_list: list=None, verbose=False, with_diff=False, *args, **kwargs):
+    def apply(self, name_list: list=None, verbose=False, with_profile=False, *args, **kwargs):
 
         '''
 
@@ -33,83 +32,75 @@ class QuantizeOp(BaseOp):
         :return:
         '''
         diff = {}
+        storage_save = {}
+        if self.qconfig is None:
+            self.mod_model = copy.deepcopy(self.model)
+            if with_profile:
+                for name in name_list:
+                    mod = self.model.get_submodule(name)
+                    param = mod.weight.data.cpu().numpy().flatten()
+                    if hasattr(mod, "bias") and mod.bias is not None:
+                        param = np.concatenate([param, mod.bias.data.cpu().numpy().flatten()], axis=0)
+                    mod_ = self.mod_model.get_submodule(name)
+                    param_ = mod_.weight.data.cpu().numpy().flatten()
+                    if hasattr(mod, "bias") and mod.bias is not None:
+                        param_ = np.concatenate([param_, mod_.bias.data.cpu().numpy().flatten()], axis=0)
+                    diff[name] = param - param_
+                    storage_save[name] = get_size(mod_.weight.dtype)
+                return self.mod_model, diff, storage_save
+            else:
+                return self.mod_model
         if name_list is None:
             name_list = self.operatable
             self.qconfig_dict = {"object_type": [(nn.Linear, self.qconfig)]}
         else:
             for name in name_list:
-
-                if name not in self.operatable:
+                if name + ".SVDLinear-0" in self.operatable:
+                    self.qconfig_dict["module_name"][name + ".SVDLinear-0"] = self.qconfig
+                    self.qconfig_dict["module_name"][name + ".SVDLinear-1"] = self.qconfig
+                    if with_profile:
+                        raise ValueError("Currently doesn't support get profile for SVD layer.")
+                elif name + ".SVDConv-0" in self.operatable:
+                    self.qconfig_dict["module_name"][name + ".SVDConv-0"] = self.qconfig
+                    self.qconfig_dict["module_name"][name + ".SVDConv-1"] = self.qconfig
+                    if with_profile:
+                        raise ValueError("Currently doesn't support get profile for SVD layer.")
+                elif name not in self.operatable:
                     print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
                     raise AttributeError
-
-                self.qconfig_dict["module_name"][name] = self.qconfig
+                else:
+                    self.qconfig_dict["module_name"][name] = self.qconfig
         model_to_quantize = copy.deepcopy(self.model)
+        model_to_quantize.eval()
         if verbose:
             print("model to qunatize:", model_to_quantize)
         prepared_model = prepare_fx(model_to_quantize, self.qconfig_dict)
         if verbose:
             print("prepared model:", prepared_model)
         self.mod_model = convert_fx(prepared_model)
-        if with_diff:
-            for name, module in self.mod_model.named_modules():
-                print(name)
-            print("Wait for further updates")
-            exit(0)
         if verbose:
             print("quantized model", self.mod_model)
-        self.print_size()
-
-        if with_diff:
+        if with_profile:
             for name in name_list:
                 mod = self.model.get_submodule(name)
                 param = mod.weight.data.cpu().numpy().flatten()
-                if hasattr(mod, "bias"):
+                if hasattr(mod, "bias") and mod.bias is not None:
                     param = np.concatenate([param, mod.bias.data.cpu().numpy().flatten()], axis=0)
                 mod_ = self.mod_model.get_submodule(name)
-                param_ = mod_.weight.data.cpu().numpy().flatten()
-                if hasattr(mod_, "bias"):
-                    param_ = np.concatenate([param_, mod_.bias.data.cpu().numpy().flatten()], axis=0)
+                param_ = mod_.weight().dequantize().data.cpu().numpy().flatten()
+                if hasattr(mod_, "bias")  and mod.bias is not None:
+                    param_ = np.concatenate([param_, mod_.bias().dequantize().data.cpu().numpy().flatten()], axis=0)
                 diff[name] = param - param_
-            return self.mod_model, diff
+                storage_save[name] = get_size(mod_.weight().dtype)
+            return self.mod_model, diff, storage_save
         else:
             return self.mod_model
 
     def reset(self):
+        self.mode = "none"
         self.qconfig_dict = {
             "module_name": OrderedDict()
         }
-
-    def apply_with_finetune(self, name_list, verbose=False, *args, **kwargs):
-        for name in name_list:
-
-            if name not in self.operatable:
-                print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
-                raise AttributeError
-
-            self.qconfig_dict["module_name"][name] = self.qconfig
-        model_to_quantize = copy.deepcopy(self.model)
-        if verbose:
-            print("model to qunatize:", model_to_quantize)
-        prepared_model = prepare_fx(model_to_quantize, self.qconfig_dict)
-
-        print("Finetuning...")
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        prepared_model.to(device)
-        criterion = nn.CrossEntropyLoss()
-        optimizer_ft = optim.SGD(prepared_model.parameters(), lr=1e-3, momentum=0.9, weight_decay=0.1)
-        exp_lr_scheduler = optim.lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.3)
-        prepared_model = train_model(prepared_model, criterion, optimizer_ft, exp_lr_scheduler,
-                                     num_epochs=10, device=device)
-
-        if verbose:
-            print("prepared model:", prepared_model)
-        self.mod_model = convert_fx(prepared_model)
-        if verbose:
-            print("quantized model", self.mod_model)
-        self.print_size()
-
-        return self.mod_model
 
     def set_config(self, config=get_default_qconfig("fbgemm")):
         '''
@@ -117,7 +108,12 @@ class QuantizeOp(BaseOp):
         :param config: quantization configuration
         :return: no return, update the qconfig_dict
         '''
-        self.qconfig = config
+        if config == "fbgemm":
+            self.mode = "fbgemm"
+            self.qconfig = get_default_qconfig("fbgemm")
+        else:
+            self.mode = "none"
+            self.qconfig = None
 
     @property
     def operatable(self):

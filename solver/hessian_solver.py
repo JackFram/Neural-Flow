@@ -1,8 +1,7 @@
 from collections import defaultdict
 import itertools
 from .base_solver import *
-from opt import PruningOp, SPruningOp, BertQuantizeOp, LowRankOp
-# from opt import PruningOp, SPruningOp, BertQuantizeOp
+from opt import PruningOp, SPruningOp, BertQuantizeOp, LowRankOp, QuantizeOp
 from misc.train_bert import get_bert_FIM
 from misc.cv_utils import get_cv_FIM
 from misc.translation import get_translation_FIM
@@ -162,8 +161,9 @@ class OneShotHessianSolver(BaseSolver):
                         profile[name] = storage[name] / (loss[name] + 1e-12)
                         if original_size is None:
                             original_size = diff[layer_name].size
-                elif isinstance(op, BertQuantizeOp):
-                    op.model.to("cpu")
+                elif isinstance(op, BertQuantizeOp) or isinstance(op, QuantizeOp):
+                    if isinstance(op, BertQuantizeOp):
+                        op.model.to("cpu")
                     for mode in [None, "fbgemm"]:
                         op.reset()
                         op.set_config(mode)

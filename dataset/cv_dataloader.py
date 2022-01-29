@@ -1,5 +1,7 @@
+import os
 import torchvision
 import torchvision.transforms as transforms
+import torchvision.datasets as datasets
 import torch
 from dataset.imagenet_16 import ImageNet16Data
 
@@ -60,13 +62,15 @@ class ImageNet:
             transforms.Normalize(mean,std),
         ])
 
-        self.trainset = torchvision.datasets.ImageNet(
-            root=root_dir, split="train", transform=self.transform_train)
+        traindir = os.path.join(root_dir, 'train')
+        testdir = os.path.join(root_dir, 'val')
+        self.trainset = datasets.ImageFolder(
+            root=traindir, transform=self.transform_train)
         self.trainloader = torch.utils.data.DataLoader(
             self.trainset, batch_size=args.train_batch_size, shuffle=True, num_workers=args.workers)
 
-        self.testset = torchvision.datasets.ImageNet(
-            root=root_dir, split="val", transform=self.transform_test)
+        self.testset = datasets.ImageFolder(
+            root=testdir, transform=self.transform_test)
         self.testloader = torch.utils.data.DataLoader(
             self.testset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.workers)
 
