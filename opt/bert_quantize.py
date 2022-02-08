@@ -22,7 +22,7 @@ class BertQuantizeOp(BaseOp):
         }
         self.qconfig_set = set()
 
-    def apply(self, name_list: list=None, verbose=False, with_profile=False, *args, **kwargs):
+    def apply(self, name_list: list=None, verbose=False, with_profile=False, inplace=False, *args, **kwargs):
 
         '''
 
@@ -36,7 +36,10 @@ class BertQuantizeOp(BaseOp):
         diff = {}
         storage_save = {}
         if self.qconfig is None:
-            self.mod_model = copy.deepcopy(self.model)
+            if inplace is True:
+                self.mod_model = self.model
+            else:
+                self.mod_model = copy.deepcopy(self.model)
             if with_profile:
                 for name in name_list:
                     mod = self.model.get_submodule(name)
@@ -57,12 +60,20 @@ class BertQuantizeOp(BaseOp):
             self.qconfig_dict = {nn.Linear: self.qconfig}
         else:
             for name in name_list:
-
-                if name not in self.operatable:
+                if name + ".SVDLinear-0" in self.operatable:
+                    self.qconfig_dict[name + ".SVDLinear-0"] = self.qconfig
+                    self.qconfig_dict[name + ".SVDLinear-1"] = self.qconfig
+                    if with_profile:
+                        raise ValueError("Currently doesn't support get profile for SVD layer.")
+                elif name + ".SVDConv-0" in self.operatable:
+                    self.qconfig_dict[name + ".SVDConv-0"] = self.qconfig
+                    self.qconfig_dict[name + ".SVDConv-1"] = self.qconfig
+                    if with_profile:
+                        raise ValueError("Currently doesn't support get profile for SVD layer.")
+                elif name not in self.operatable:
                     print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
                     raise AttributeError
-
-                if isinstance(self.qconfig, torch.dtype):
+                elif isinstance(self.qconfig, torch.dtype):
                     self.qconfig_set.add(self.qconfig)
                 else:
                     self.qconfig_dict[name] = self.qconfig
@@ -92,6 +103,7 @@ class BertQuantizeOp(BaseOp):
                 if hasattr(mod, "bias") and mod.bias is not None:
                     param_ = np.concatenate([param_, mod_.bias().dequantize().data.cpu().numpy().flatten()], axis=0)
                 diff[name] = param - param_
+                # print(self.mode, np.linalg.norm(diff[name]), np.abs(diff[name]).max())
                 storage_save[name] = get_size(mod_.weight().dtype)
             return self.mod_model, diff, storage_save
         else:

@@ -4,6 +4,7 @@ __pycache__/
 *.pem
 
 data/
+info/
 checkpoint/
 results/
 *.out
@@ -13,4 +14,6 @@ results/
 
 tst-translation/
 t5-small—translation-czy/
+t5-small-translation-czy/
 t5-small—translation/
+t5-small-translation/

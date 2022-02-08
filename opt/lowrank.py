@@ -1,5 +1,5 @@
 from .base import BaseOp
-from netflow import *
+# from netflow import *
 
 import numpy as np
 import torch
@@ -9,6 +9,7 @@ class SVDDecomposedLayer():
     def __init__(self, layer,
                  rank = None,
                  pretrained = None):
+        self.layer_name = "SVDLinear"
         self.layer = layer
         self.pretrained = pretrained
         
@@ -25,29 +26,32 @@ class SVDDecomposedLayer():
         
         self.weight, self.bias = self.get_weights_to_decompose()
         self.rank = rank
-        ##### create decomposed layers
-        # self.new_layers = nn.Sequential()
+        #### create decomposed layers
+        self.new_layers = nn.Sequential()
         
-        # for j, l in enumerate(self.create_new_layers()):
-        #     self.new_layers.add_module('{}-{}'.format(self.layer_name, j), l)
+        for j, l in enumerate(self.create_new_layers()):
+            self.new_layers.add_module('{}-{}'.format(self.layer_name, j), l)
         
-        self.new_layers = nn.Linear(in_features = self.in_features, out_features = self.out_features)
+        # self.new_layers = nn.Linear(in_features = self.in_features, out_features = self.out_features)
 
         [w0, w1], [_, b] = self.get_svd_factors()        
 
-        self.new_layers.weight.data = torch.matmul(w1, w0)
+        # self.new_layers.weight.data = torch.matmul(w1, w0)
+
+        self.recon_w = torch.matmul(w1, w0)
 
         if b is not None:
-            self.new_layers.bias.data = b
+            self.recon_b = b
         else:
-            self.new_layers.bias = None
+            self.recon_b = None
 
-        # for j, (w, b)  in enumerate(zip(weights, biases)):
-        #     self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).weight.data = w
-        #     if b is not None:
-        #         self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias.data = b
-        #     else:
-        #         self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias = None 
+        weights, biases = [w0, w1], [_, b]
+        for j, (w, b)  in enumerate(zip(weights, biases)):
+            self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).weight.data = w
+            if b is not None:
+                self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias.data = b
+            else:
+                self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias = None
                 
         self.layer = None
         self.weight = None
@@ -110,7 +114,7 @@ class SVDDecomposedConvLayer():
                  rank = None,
                  pretrained = None):
 
-        self.layer_name = layer_name
+        self.layer_name = "SVDConv"
         self.layer = layer
         self.pretrained = pretrained
         
@@ -136,31 +140,32 @@ class SVDDecomposedConvLayer():
         self.weight, self.bias = self.get_weights_to_decompose()
         self.rank = rank
             
-        ##### create decomposed layers
-        # self.new_layers = nn.Sequential()
+        #### create decomposed layers
+        self.new_layers = nn.Sequential()
         
-        # for j, l in enumerate(self.create_new_layers()):
-        #     self.new_layers.add_module('{}-{}'.format(self.layer_name, j), l)
+        for j, l in enumerate(self.create_new_layers()):
+            self.new_layers.add_module('{}-{}'.format(self.layer_name, j), l)
         
-        self.new_layers = nn.Conv2d(in_channels = self.in_channels, 
-                                    out_channels = self.out_channels, 
-                                    padding = self.layer.padding, 
-                                    stride = self.layer.stride)
+        # self.new_layers = nn.Conv2d(in_channels = self.in_channels,
+        #                             out_channels = self.out_channels,
+        #                             padding = self.layer.padding,
+        #                             stride = self.layer.stride)
         [w0, w1], [_, b] = self.get_svd_factors()  
 
-        self.new_layers.weight.data = torch.matmul(w1, w0)
+        self.recon_w = torch.matmul(w1, w0)
 
         if b is not None:
-            self.new_layers.bias.data = b
+            self.recon_b = b
         else:
-            self.new_layers.bias = None      
-        
-        # for j, (w, b)  in enumerate(zip(weights, biases)):
-        #     self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).weight.data = w
-        #     if b is not None:
-        #         self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias.data = b
-        #     else:
-        #         self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias = None 
+            self.recon_b = None
+
+        weights, biases = [w0, w1], [_, b]
+        for j, (w, b) in enumerate(zip(weights, biases)):
+            self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).weight.data = w
+            if b is not None:
+                self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias.data = b
+            else:
+                self.new_layers.__getattr__('{}-{}'.format(self.layer_name, j)).bias = None
                 
         self.layer = None
         self.weight = None
@@ -218,9 +223,9 @@ class SVDDecomposedConvLayer():
                 
             w0 = torch.FloatTensor(w0[:,:, np.newaxis, np.newaxis]).contiguous()
             w1 = torch.FloatTensor(w1[:,:, np.newaxis, np.newaxis]).contiguous()
-            
 
         return [w0, w1], [None, bias]
+
 
 class LowRankOp(BaseOp):
     def __init__(self, model: nn.Module, rank_fraction=1):
@@ -229,12 +234,15 @@ class LowRankOp(BaseOp):
         self.rank_fraction = rank_fraction
         self.mod_model = None
 
-    def apply(self, name_list, rank_fraction=None, verbose=False, with_profile=False, *args, **kwargs):
+    def apply(self, name_list, rank_fraction=None, verbose=False, with_profile=False, inplace=False, *args, **kwargs):
         if rank_fraction is None:
            rank_fraction = self.rank_fraction 
         diff = {}
         storage_save = {}
-        model_to_lowrank = copy.deepcopy(self.model)
+        if inplace is True:
+            model_to_lowrank = self.model
+        else:
+            model_to_lowrank = copy.deepcopy(self.model)
         for name in set(name_list):
             if name not in self.operatable:
                 print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
@@ -252,11 +260,16 @@ class LowRankOp(BaseOp):
             rank = int(rank_fraction * dim_in * dim_out / (dim_in + dim_out))
 
             if rank_fraction < 1:
-                self.low_rank_(prevmod, mod_name, mod, rank)
+                svd_mod = self.low_rank_(prevmod, mod_name, mod, rank)
+                if with_profile:
+                    param_ = self.get_param_(svd_mod)
+                # print(prevmod, param.shape, param_.shape)
+            elif with_profile:
+                param_ = param
 
             if with_profile:
-                param_ = self.get_param(model_to_lowrank.get_submodule(name))
                 diff[name] = param - param_
+                # print(rank_fraction, rank, dim_in, dim_out, np.linalg.norm(diff[name]), np.abs(diff[name]).max())
                 storage_save[name] = rank_fraction
 
         self.mod_model = model_to_lowrank
@@ -271,11 +284,19 @@ class LowRankOp(BaseOp):
         elif isinstance(layer, nn.Linear):
             decomposed_layer = SVDDecomposedLayer(layer, rank)
         prev_layer.__setattr__(layer_name, decomposed_layer.new_layers)
+        return decomposed_layer
 
     def get_param(self, mod:nn.modules):
         weight = mod.weight.data.cpu().numpy().flatten()
-        if hasattr(mod, "bias") and mod.bias:
+        if hasattr(mod, "bias") and mod.bias is not None:
             bias = mod.bias.data.cpu().numpy().flatten()
+            return np.concatenate([weight, bias], axis=0)
+        return weight
+
+    def get_param_(self, svd_mod):
+        weight = svd_mod.recon_w.cpu().numpy().flatten()
+        if hasattr(svd_mod, "recon_b") and svd_mod.recon_b is not None:
+            bias = svd_mod.recon_b.cpu().numpy().flatten()
             return np.concatenate([weight, bias], axis=0)
         return weight
 
@@ -286,3 +307,44 @@ class LowRankOp(BaseOp):
             if isinstance(mod, nn.Linear) or isinstance(mod, nn.Conv2d):
                 ret_list.append(name)
         return ret_list
+
+    def get_storage(self, name_list, rank_fraction=None, verbose=False, with_profile=False, *args, **kwargs):
+        if rank_fraction is None:
+            rank_fraction = self.rank_fraction
+        diff = {}
+        storage_save = {}
+        # model_to_lowrank = copy.deepcopy(self.model)
+        for name in set(name_list):
+            if name not in self.operatable:
+                print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
+                raise AttributeError
+
+            # prevmod_name = ".".join(name.split(".")[:-1])
+            # mod_name = name.split(".")[-1]
+            # prevmod = model_to_lowrank.get_submodule(prevmod_name)
+            # mod = model_to_lowrank.get_submodule(name)
+
+            # if with_profile:
+            #     param = self.get_param(mod)
+            #
+            # dim_in, dim_out = mod.weight.data.cpu().numpy().shape
+            # rank = int(rank_fraction * dim_in * dim_out / (dim_in + dim_out))
+
+            # if rank_fraction < 1:
+            #     svd_mod = self.low_rank_(prevmod, mod_name, mod, rank)
+            #     if with_profile:
+            #         param_ = self.get_param_(svd_mod)
+            #         # print(prevmod, param.shape, param_.shape)
+            # elif with_profile:
+            #     param_ = param
+
+            if with_profile:
+                # diff[name] = param - param_
+                # print(rank_fraction, rank, dim_in, dim_out, np.linalg.norm(diff[name]), np.abs(diff[name]).max())
+                storage_save[name] = rank_fraction
+
+        # self.mod_model = model_to_lowrank
+        if with_profile:
+            return storage_save
+        else:
+            raise ValueError

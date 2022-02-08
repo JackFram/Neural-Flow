@@ -321,9 +321,9 @@ def get_bert_FIM(args, model, tokenizer, layer_name, logger, prefix=""):
                 accelerator.backward(loss)
                 progress_bar.update(1)
                 completed_steps += 1
-                weight = model.get_submodule(layer_name).weight.data.cpu().numpy().flatten()
+                weight = model.get_submodule(layer_name).weight.grad.data.cpu().numpy().flatten()
                 if hasattr(model.get_submodule(layer_name), "bias") and model.get_submodule(layer_name).bias is not None:
-                    bias = model.get_submodule(layer_name).bias.data.cpu().numpy().flatten()
+                    bias = model.get_submodule(layer_name).bias.grad.data.cpu().numpy().flatten()
                     param = np.concatenate([weight, bias], axis=0)
                 else:
                     param = weight

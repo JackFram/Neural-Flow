@@ -1,13 +1,13 @@
 
 from .base import BaseOp
-from .utils import get_size
-from netflow import *
+# from .utils import get_size
+# from netflow import *
 
 import copy
 import numpy as np
 import torch.nn as nn
 import torch.nn.utils.prune as prune
-import torch.optim as optim
+# import torch.optim as optim
 # from misc.train import train_model
 
 
@@ -19,13 +19,36 @@ class PruningOp(BaseOp):
         self.method = method
         self.config = None
 
-    def apply(self, name_list, verbose=False, amount=None, with_profile=False, *args, **kwargs):
+    def apply(self, name_list, verbose=False, amount=None, with_profile=False, inplace=False, *args, **kwargs):
         if amount is not None:
             self.amount = amount
         diff = {}
         storage_save = {}
-        model_to_prune = copy.deepcopy(self.model)
+        if inplace is True:
+            model_to_prune = self.model
+        else:
+            model_to_prune = copy.deepcopy(self.model)
         for name in set(name_list):
+            if name + ".SVDLinear-0" in self.operatable:
+                mod_1 = model_to_prune.get_submodule(name+".SVDLinear-0")
+                mod_2 = model_to_prune.get_submodule(name+".SVDLinear-1")
+                self._prune(mod_1)
+                self._prune(mod_2)
+                self.mod_model = model_to_prune
+                if with_profile:
+                    raise ValueError("Currently doesn't support get profile for SVD layer.")
+                return self.mod_model
+
+            if name + ".SVDConv-0" in self.operatable:
+                mod_1 = model_to_prune.get_submodule(name+".SVDConv-0")
+                mod_2 = model_to_prune.get_submodule(name+".SVDConv-1")
+                self._prune(mod_1)
+                self._prune(mod_2)
+                self.mod_model = model_to_prune
+                if with_profile:
+                    raise ValueError("Currently doesn't support get profile for SVD layer.")
+                return self.mod_model
+
             if name not in self.operatable:
                 print("{} is not a operatable layer, retry something in:{} !".format(name, self.operatable))
                 raise AttributeError
@@ -40,6 +63,7 @@ class PruningOp(BaseOp):
             if with_profile:
                 param_ = self.get_param(mod)
                 diff[name] = param - param_
+                # print(amount, np.linalg.norm(diff[name]), np.abs(diff[name]).max())
                 storage_save[name] = 1 - self.amount
             if verbose:
                 print(f"Module weights after pruning: {list(mod.named_parameters())}")
@@ -98,7 +122,7 @@ class PruningOp(BaseOp):
         elif self.method == "random":
             prune.random_unstructured(module, 'weight', amount=self.amount)
 
-        prune.remove(module, 'weight')
+        # prune.remove(module, 'weight')
 
     def set_config(self, config={}):
         self.config = config
@@ -108,7 +132,7 @@ class PruningOp(BaseOp):
 
     def get_param(self, mod:nn.modules):
         weight = mod.weight.data.cpu().numpy().flatten()
-        if hasattr(mod, "bias") and mod.bias:
+        if hasattr(mod, "bias") and mod.bias is not None:
             bias = mod.bias.data.cpu().numpy().flatten()
             return np.concatenate([weight, bias], axis=0)
         return weight

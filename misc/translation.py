@@ -286,6 +286,7 @@ def parse_args():
 def get_translation_FIM(args, model, tokenizer, layer_name, logger):
     # Parse the arguments
     args = parse_args()
+    args.per_device_train_batch_size = 64
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
@@ -539,9 +540,9 @@ def get_translation_FIM(args, model, tokenizer, layer_name, logger):
             accelerator.backward(loss)
             progress_bar.update(1)
             completed_steps += 1
-            weight = model.get_submodule(layer_name).weight.data.cpu().numpy().flatten()
+            weight = model.get_submodule(layer_name).weight.grad.data.cpu().numpy().flatten()
             if hasattr(model.get_submodule(layer_name), "bias") and model.get_submodule(layer_name).bias is not None:
-                bias = model.get_submodule(layer_name).bias.data.cpu().numpy().flatten()
+                bias = model.get_submodule(layer_name).bias.grad.data.cpu().numpy().flatten()
                 param = np.concatenate([weight, bias], axis=0)
             else:
                 param = weight
