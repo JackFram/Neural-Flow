@@ -885,7 +885,6 @@ def main():
     # lq_loss = data["lq_loss"]
     # l_loss = data["l_loss"]
     # d_loss = data["d_loss"]
-
     np.savez("./results/data/t5-small-wmt16_all.npz", q_loss=q_loss, p_loss=p_loss, pqdl_loss=pqdl_loss, r_loss=r_loss, s_loss=s_loss, lq_loss=lq_loss, l_loss=l_loss, d_loss=d_loss, pq_loss=pq_loss)
 
     quant_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 20)[:len(q_loss)]
