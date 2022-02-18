@@ -58,7 +58,6 @@ class OneShotHessianSolver(BaseSolver):
             print(f"Get profile count: {i+1}/{len(self.cand)} layer name: {layer_name}")
             FIM = self.get_FIM_func(self.configs, self.net, self.tokenizer, layer_name, self.logger)
             storage, original_size = self.get_storage_info(layer_name)
-
             op_indexed = defaultdict(list)
             for k, v in storage.items():
                 _, op_name, attrs = k.split("@")
