@@ -1,7 +1,6 @@
 from .base import BaseOp
 
 import copy
-import numpy as np
 import torch.nn as nn
 import torch.nn.utils.prune as prune
 

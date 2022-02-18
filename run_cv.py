@@ -53,8 +53,8 @@ parser.add_argument('--train-batch-size', default=256, type=int,
 parser.add_argument('--test-batch-size', default=200, type=int,
                     metavar='N',
                     help='mini-batch size for test')
-parser.add_argument('-p', '--print-freq', default=10, type=int,
-                    metavar='N', help='print frequency (default: 10)')
+parser.add_argument('-p', '--print-freq', default=50, type=int,
+                    metavar='N', help='print frequency (default: 50)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
@@ -172,15 +172,15 @@ def main_worker(gpu, args):
     #         'optimizer' : optimizer.state_dict(),
     #     }, is_best)
 
-    np.savez(f"./results/data/{args.task_name}.npz", pqd_loss)
-    
+    np.savez(f"./results/data/{args.task}.npz", pqd_loss=pqd_loss)
+
     oshs_range = np.arange(hession_solver.model_size, 0, -hession_solver.model_size / 20)
     
     plt.plot(oshs_range, pqd_loss, label="pqd_loss")
 
     plt.legend()
 
-    plt.savefig(f"./results/graph/{args.task_name}.pdf", bbox_inches="tight", dpi=500)
+    plt.savefig(f"./results/graph/{args.task}.pdf", bbox_inches="tight", dpi=500)
 
 if __name__ == '__main__':
     main()

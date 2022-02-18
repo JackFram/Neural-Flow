@@ -429,12 +429,11 @@ class OneShotHessianSolver(BaseSolver):
 
     def get_diff(self, name_list):
         model = copy.deepcopy(self.net)
-        model.to("cpu")
+        # model.to("cpu")
         quantize_list = []
 
         for name in name_list.split("+"):
             layer_name, op_name, attrs = name.split("@")
-            # print(f"processing {op_name} operator with attribute: {attrs}")
             if op_name == "upruning":
                 op = PruningOp(model)
                 model = op.apply([layer_name], amount=float(attrs), remove_prune=True, inplace=True)
@@ -448,7 +447,7 @@ class OneShotHessianSolver(BaseSolver):
                 model = op.apply([layer_name], amount=float(attrs), remove_prune=True, inplace=True)
         if len(quantize_list) > 0:
             # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-            op = BertQuantizeOp(model)
+            op = QuantizeOp(model)
             op.set_config()
             model = op.apply(name_list=quantize_list, verbose=False, inplace=True)
 
@@ -495,7 +494,7 @@ class OneShotHessianSolver(BaseSolver):
 
         orig_w = self.get_param(self.net.get_submodule(layer_name))
 
-        # if check_row(name_list):
+        # if check_row(name_list)ß:
         #     print(name_list)
         #     print(orig_w[:10], w[:10])
 

@@ -411,7 +411,7 @@ class LowRankOp(BaseOp):
 
     def low_rank_(self, prev_layer, layer_name, layer, rank):
         if isinstance(layer, nn.Conv2d):
-            decomposed_layer = SVDDecomposedConvLayer(layer, layer_name, rank)
+            decomposed_layer = SVDDecomposedConvLayer(layer, rank)
         elif isinstance(layer, nn.Linear):
             decomposed_layer = SVDDecomposedLayer(layer, rank)
         prev_layer.__setattr__(layer_name, decomposed_layer.new_layers)

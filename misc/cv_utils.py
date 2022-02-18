@@ -9,6 +9,7 @@ from opt import QuantizeOp, SPruningOp, PruningOp, LowRankOp
 
 import torch
 import torch.nn as nn
+import torch.nn.utils.prune as prune
 
 def get_cv_FIM(args, model, tokenizer, layer_name, logger, prefix=""):
     # get train loader
@@ -41,13 +42,31 @@ def get_cv_FIM(args, model, tokenizer, layer_name, logger, prefix=""):
                 bias = model.get_submodule(layer_name).bias.grad.cpu().numpy().flatten()
                 param = np.concatenate([weight, bias], axis=0)
             else:
-                param = weight
+                param = np.concatenate([weight, np.zeros(model.get_submodule(layer_name).weight.grad.cpu().numpy().shape[0])], axis=0)
             if FIM is None:
                 FIM = param**2
             else:
                 FIM += param**2
         return FIM/args.train_batch_size
 
+def remove_prune(model, name_list):
+    op = SPruningOp(model)
+    for name in name_list:
+        if name + ".SVDLinear-0" in op.operatable:
+            mod_1 = model.get_submodule(name + ".SVDLinear-0")
+            mod_2 = model.get_submodule(name + ".SVDLinear-1")
+            prune.remove(mod_1, "weight")
+            prune.remove(mod_2, "weight")
+
+        if name + ".SVDConv-0" in op.operatable:
+            mod_1 = model.get_submodule(name + ".SVDConv-0")
+            mod_2 = model.get_submodule(name + ".SVDConv-1")
+            prune.remove(mod_1, "weight")
+            prune.remove(mod_2, "weight")
+
+        if name in op.operatable:
+            mod = model.get_submodule(name)
+            prune.remove(mod, "weight")
 
 def evaluate_cv_solver(solver, get_solution_func, model_orig, args, **kwargs):
     loss = []
@@ -60,9 +79,14 @@ def evaluate_cv_solver(solver, get_solution_func, model_orig, args, **kwargs):
     ds = get_dataset(args.data, args)
     train_loader = ds.get_train_loader()
     val_loader = ds.get_test_loader()
-    for storage_thresold in np.arange(solver.model_size, 0, -solver.model_size/20):
-
+    for storage_thresold in np.arange(solver.model_size-solver.model_size/20, 0, -solver.model_size/20):
         model = copy.deepcopy(model_orig)
+        if not torch.cuda.is_available():
+            print('using CPU, this will be slow')
+        elif args.gpu is not None:
+            torch.cuda.set_device(args.gpu)
+            model = model.cuda(args.gpu)
+        prune_set = set()
 
         print("Getting results for storage threshold {}".format(storage_thresold))
         if 'methods' in kwargs:
@@ -76,28 +100,34 @@ def evaluate_cv_solver(solver, get_solution_func, model_orig, args, **kwargs):
                 for name in layer.split("+"):
                     layer_name, op_name, attrs = name.split("@")
                     if op_name == "upruning":
+                        if float(attrs) >= 0:
+                            prune_set.add(layer_name)
                         op = PruningOp(model)
-                        model = op.apply([layer_name], amount=float(attrs))
+                        model = op.apply([layer_name], amount=float(attrs), inplace=True)
                     elif op_name == "quantize" and attrs != "none":
                         quantize_list.append(layer_name)
                     elif op_name == "lowrank":
                         op = LowRankOp(model)
-                        model = op.apply([layer_name], rank_fraction=(float(attrs)))
+                        model = op.apply([layer_name], rank_fraction=(float(attrs)), inplace=True)
                     elif op_name == "spruning":
+                        if float(attrs) >= 0:
+                            prune_set.add(layer_name)
                         op = SPruningOp(model)
-                        model = op.apply([layer_name], amount=float(attrs))
+                        model = op.apply([layer_name], amount=float(attrs), inplace=True)
             results = train(
                 train_loader=train_loader,
                 model=model,
                 criterion=criterion,
                 optimizer=optimizer,
-                epoch=3,
+                epoch=1,
                 args=args,
             )
+            if len(prune_set) != 0:
+                remove_prune(model, list(prune_set))
             if len(quantize_list) > 0:
                 op = QuantizeOp(model)
                 op.set_config()
-                mod_model = op.apply(name_list=quantize_list, verbose=False)
+                mod_model = op.apply(name_list=quantize_list, verbose=False, inplace=True)
             else:
                 mod_model = model
             # training_args.no_cuda = True

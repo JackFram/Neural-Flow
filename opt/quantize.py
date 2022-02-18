@@ -35,7 +35,6 @@ class QuantizeOp(BaseOp):
             self.mod_model = self.model
         else:
             self.mod_model = copy.deepcopy(self.model)
-
         if self.qconfig is None:
             return self.mod_model
         for name in name_list:
