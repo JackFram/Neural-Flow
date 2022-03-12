@@ -326,7 +326,7 @@ def get_bert_FIM(args, model, tokenizer, layer_name, logger, prefix=""):
                     bias = model.get_submodule(layer_name).bias.grad.data.cpu().numpy().flatten()
                     param = np.concatenate([weight, bias], axis=0)
                 else:
-                    param = weight
+                    param = np.concatenate([weight, np.zeros(model.get_submodule(layer_name).weight.data.cpu().numpy().shape[0])], axis=0)
                 if FIM is None:
                     FIM = param**2
                 else:

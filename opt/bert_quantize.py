@@ -33,28 +33,13 @@ class BertQuantizeOp(BaseOp):
         :param kwargs:
         :return:
         '''
-        diff = {}
-        storage_save = {}
         if self.qconfig is None:
             if inplace is True:
                 self.mod_model = self.model
             else:
                 self.mod_model = copy.deepcopy(self.model)
-            if with_profile:
-                for name in name_list:
-                    mod = self.model.get_submodule(name)
-                    param = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias") and mod.bias is not None:
-                        param = np.concatenate([param, mod.bias.data.cpu().numpy().flatten()], axis=0)
-                    mod_ = self.mod_model.get_submodule(name)
-                    param_ = mod_.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias") and mod.bias is not None:
-                        param_ = np.concatenate([param_, mod_.bias.data.cpu().numpy().flatten()], axis=0)
-                    diff[name] = param - param_
-                    storage_save[name] = get_size(mod_.weight.dtype)
-                return self.mod_model, diff, storage_save
-            else:
-                return self.mod_model
+            return self.mod_model
+
         if name_list is None:
             name_list = self.operatable
             self.qconfig_dict = {nn.Linear: self.qconfig}
@@ -63,13 +48,9 @@ class BertQuantizeOp(BaseOp):
                 if name + ".SVDLinear-0" in self.operatable:
                     self.qconfig_dict[name + ".SVDLinear-0"] = self.qconfig
                     self.qconfig_dict[name + ".SVDLinear-1"] = self.qconfig
-                    if with_profile:
-                        raise ValueError("Currently doesn't support get profile for SVD layer.")
                 elif name + ".SVDConv-0" in self.operatable:
                     self.qconfig_dict[name + ".SVDConv-0"] = self.qconfig
                     self.qconfig_dict[name + ".SVDConv-1"] = self.qconfig
-                    if with_profile:
-                        raise ValueError("Currently doesn't support get profile for SVD layer.")
                 elif name not in self.operatable:
                     print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
                     raise AttributeError
@@ -91,23 +72,7 @@ class BertQuantizeOp(BaseOp):
             print("quantized model", self.mod_model)
 
         # self.print_size()
-
-        if with_profile:
-            for name in name_list:
-                mod = self.model.get_submodule(name)
-                param = mod.weight.data.cpu().numpy().flatten()
-                if hasattr(mod, "bias") and mod.bias is not None:
-                    param = np.concatenate([param, mod.bias.data.cpu().numpy().flatten()], axis=0)
-                mod_ = self.mod_model.get_submodule(name)
-                param_ = mod_.weight().dequantize().data.cpu().numpy().flatten()
-                if hasattr(mod, "bias") and mod.bias is not None:
-                    param_ = np.concatenate([param_, mod_.bias().dequantize().data.cpu().numpy().flatten()], axis=0)
-                diff[name] = param - param_
-                # print(self.mode, np.linalg.norm(diff[name]), np.abs(diff[name]).max())
-                storage_save[name] = get_size(mod_.weight().dtype)
-            return self.mod_model, diff, storage_save
-        else:
-            return self.mod_model
+        return self.mod_model
 
     def reset(self):
         self.qconfig_dict = {

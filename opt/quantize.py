@@ -20,7 +20,7 @@ class QuantizeOp(BaseOp):
             "module_name": OrderedDict()
         }
 
-    def apply(self, name_list: list=None, verbose=False, with_profile=False, *args, **kwargs):
+    def apply(self, name_list: list, verbose=False, inplace=False, *args, **kwargs):
 
         '''
 
@@ -31,70 +31,34 @@ class QuantizeOp(BaseOp):
         :param kwargs:
         :return:
         '''
-        diff = {}
-        storage_save = {}
-        if self.qconfig is None:
-            self.mod_model = copy.deepcopy(self.model)
-            if with_profile:
-                for name in name_list:
-                    mod = self.model.get_submodule(name)
-                    param = mod.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias") and mod.bias is not None:
-                        param = np.concatenate([param, mod.bias.data.cpu().numpy().flatten()], axis=0)
-                    mod_ = self.mod_model.get_submodule(name)
-                    param_ = mod_.weight.data.cpu().numpy().flatten()
-                    if hasattr(mod, "bias") and mod.bias is not None:
-                        param_ = np.concatenate([param_, mod_.bias.data.cpu().numpy().flatten()], axis=0)
-                    diff[name] = param - param_
-                    storage_save[name] = get_size(mod_.weight.dtype)
-                return self.mod_model, diff, storage_save
-            else:
-                return self.mod_model
-        if name_list is None:
-            name_list = self.operatable
-            self.qconfig_dict = {"object_type": [(nn.Linear, self.qconfig)]}
+        if inplace:
+            self.mod_model = self.model
         else:
-            for name in name_list:
-                if name + ".SVDLinear-0" in self.operatable:
-                    self.qconfig_dict["module_name"][name + ".SVDLinear-0"] = self.qconfig
-                    self.qconfig_dict["module_name"][name + ".SVDLinear-1"] = self.qconfig
-                    if with_profile:
-                        raise ValueError("Currently doesn't support get profile for SVD layer.")
-                elif name + ".SVDConv-0" in self.operatable:
-                    self.qconfig_dict["module_name"][name + ".SVDConv-0"] = self.qconfig
-                    self.qconfig_dict["module_name"][name + ".SVDConv-1"] = self.qconfig
-                    if with_profile:
-                        raise ValueError("Currently doesn't support get profile for SVD layer.")
-                elif name not in self.operatable:
-                    print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
-                    raise AttributeError
-                else:
-                    self.qconfig_dict["module_name"][name] = self.qconfig
-        model_to_quantize = copy.deepcopy(self.model)
-        model_to_quantize.eval()
+            self.mod_model = copy.deepcopy(self.model)
+
+        if self.qconfig is None:
+            return self.mod_model
+        for name in name_list:
+            if name + ".SVDLinear-0" in self.operatable:
+                self.qconfig_dict["module_name"][name + ".SVDLinear-0"] = self.qconfig
+                self.qconfig_dict["module_name"][name + ".SVDLinear-1"] = self.qconfig
+            elif name + ".SVDConv-0" in self.operatable:
+                self.qconfig_dict["module_name"][name + ".SVDConv-0"] = self.qconfig
+                self.qconfig_dict["module_name"][name + ".SVDConv-1"] = self.qconfig
+            elif name not in self.operatable:
+                print("{} is not a quantizable layer, retry something in:{} !".format(name, self.operatable))
+                raise AttributeError
+            else:
+                self.qconfig_dict["module_name"][name] = self.qconfig
         if verbose:
-            print("model to qunatize:", model_to_quantize)
-        prepared_model = prepare_fx(model_to_quantize, self.qconfig_dict)
+            print("model to qunatize:", self.mod_model)
+        prepared_model = prepare_fx(self.mod_model.eval(), self.qconfig_dict)
         if verbose:
             print("prepared model:", prepared_model)
         self.mod_model = convert_fx(prepared_model)
         if verbose:
             print("quantized model", self.mod_model)
-        if with_profile:
-            for name in name_list:
-                mod = self.model.get_submodule(name)
-                param = mod.weight.data.cpu().numpy().flatten()
-                if hasattr(mod, "bias") and mod.bias is not None:
-                    param = np.concatenate([param, mod.bias.data.cpu().numpy().flatten()], axis=0)
-                mod_ = self.mod_model.get_submodule(name)
-                param_ = mod_.weight().dequantize().data.cpu().numpy().flatten()
-                if hasattr(mod_, "bias")  and mod.bias is not None:
-                    param_ = np.concatenate([param_, mod_.bias().dequantize().data.cpu().numpy().flatten()], axis=0)
-                diff[name] = param - param_
-                storage_save[name] = get_size(mod_.weight().dtype)
-            return self.mod_model, diff, storage_save
-        else:
-            return self.mod_model
+        return self.mod_model
 
     def reset(self):
         self.mode = "none"
@@ -102,7 +66,7 @@ class QuantizeOp(BaseOp):
             "module_name": OrderedDict()
         }
 
-    def set_config(self, config=get_default_qconfig("fbgemm")):
+    def set_config(self, config="fbgemm"):
         '''
 
         :param config: quantization configuration
